@@ -15,6 +15,6 @@ end
 local async_abort_table = mp.command_native_async(
 	{"run", executable, "client", "--client-sock", client_sock},
 	function(success, result, error)
-		mp.osd_message("success = "..tostring(success).." | result = "..tostring(result).." | error = "..tostring(error), 10)
+		--mp.osd_message("simulcast success = "..tostring(success).." | result = "..tostring(result).." | error = "..tostring(error), 10)
 	end
 )
