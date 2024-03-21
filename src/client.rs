@@ -154,6 +154,7 @@ pub fn client(
 		flexi_logger::LogSpecification::builder()
 			.default(verbosity)
 			.module("mpvipc", log::LevelFilter::Error)
+			.module("rustls", log::LevelFilter::Warn)
 			.build(),
 	)
 	.format(flexi_logger::detailed_format)
