@@ -4,6 +4,8 @@ I was curious how easy it would be to sync two mpv players across the internet, 
 If one person pauses, then pause for the other person. Add in some ping calculation between clients.
 That's basically what simulcast-mpv is.
 
+This isn't bug-free and I probably won't do anything to fix that.
+
 ### **TODO:**
 - setup public relay server (fly.io?)
 - precompiled binaries for x86-64 Windows, x86-64 Linux, 64-bit ARM Linux.

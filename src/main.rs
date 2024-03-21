@@ -9,6 +9,8 @@ mod server;
 
 use clap::{Parser, Subcommand};
 use log::info;
+#[allow(unused_imports)] // for when I'm testing and have the "Press any key" disabled
+use std::io::Read;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None, flatten_help = true, disable_help_subcommand = true, infer_subcommands = true)]
@@ -107,7 +109,7 @@ fn install() -> anyhow::Result<()> {
 	}
 
 	println!("Press any key to continue...");
-	// TODO: uncomment:  let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+	let _ = std::io::stdin().read(&mut [0u8]).unwrap();
 
 	Ok(())
 }

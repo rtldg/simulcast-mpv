@@ -85,6 +85,10 @@ async fn handle_websocket_inner(
 	tokio::spawn(async move {
 		while let Some(msg) = ch_r.recv().await {
 			// println!("send msg = {msg:?}");
+			match msg {
+				WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+				_ => println!("send msg = {msg:?}"),
+			}
 			let _ = ws_s.send(Message::Text(serde_json::to_string(&msg).unwrap())).await;
 		}
 	});
@@ -100,6 +104,10 @@ async fn handle_websocket_inner(
 				let Some(msg) = msg else { return Ok(()); };
 				let msg: WsMessage = serde_json::from_str(&msg?.into_text()?)?;
 				// println!("recv msg = {msg:?}");
+				match msg {
+					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+					_ => println!("recv msg = {msg:?}")
+				}
 				match msg {
 					WsMessage::Join(ref new_room) => {
 						if new_room.as_str() == current_room {
@@ -183,7 +191,12 @@ async fn handle_websocket_inner(
 						drop(room.queued_resumes.take()); // abort queued resumes...
 
 						for member in &room.members {
-							let _ = member.sender.send(WsMessage::AbsoluteSeek(t));
+							// NOTE: We might need to send the seek to the same user that sent the seek.
+							// It can be a bit desynced if we don't...
+							//It depends on if we have a sleep in the Event::Seek though... BROCCOLI
+							if member.id != id {
+								let _ = member.sender.send(WsMessage::AbsoluteSeek(t));
+							}
 						}
 					}
 					WsMessage::Ping(_) => { /* we shouldn't be recieving this */ }

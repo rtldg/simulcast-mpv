@@ -12,6 +12,9 @@
 
 // cargo run --release -- client --client-sock mpvsock42
 
+// cargo +1.75 build --release
+// rustup override set 1.75 # last version before win7 support died
+
 use anyhow::Context;
 use log::debug;
 use log::error;
@@ -38,7 +41,7 @@ struct SharedState {
 }
 
 fn room_id(mpv: &Mpv, relay_room: &str) -> Result<String, mpvipc::Error> {
-	let title_or_file = mpv.get_property_string("media-title")? + relay_room;
+	let title_or_file = mpv.get_property_string("filename")? + relay_room;
 	// We don't want the server to see media titles...
 	Ok(blake3::hash(title_or_file.as_bytes()).to_hex().to_string())
 }
@@ -67,7 +70,10 @@ async fn ws_thread(
 		tokio::select! {
 			msg = receiver.recv() => {
 				let msg = msg.unwrap();
-				debug!("send msg = {msg:?}");
+				match msg {
+					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+					_ => debug!("send msg = {msg:?}")
+				}
 				ws.send(
 					Message::Text(
 						serde_json::to_string(&msg).unwrap()
@@ -76,7 +82,10 @@ async fn ws_thread(
 			}
 			msg = ws.next() => {
 				let msg: WsMessage = serde_json::from_str(&msg.unwrap()?.into_text()?)?;
-				debug!("recv msg = {msg:?}");
+				match msg {
+					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+					_ => debug!("recv msg = {msg:?}")
+				}
 				match msg {
 					WsMessage::Join(_) => { /* we shouldn't be receiving this */ },
 					WsMessage::Party(count) => {
@@ -92,8 +101,9 @@ async fn ws_thread(
 						};
 
 						if should_pause {
-							// these can hit too early and cause `Err(MpvError: property unavailable)`
+							// these can hit too early and cause `Err(MpvError: property unavailable)`?
 							let _ = mpv.set_property("pause", true);
+							let _ = mpv.set_property("speed", 1.0); // useful for me
 
 							let _ = mpv.run_command(MpvCommand::ShowText {
 								text: format!("party count: {count}"),
@@ -116,7 +126,12 @@ async fn ws_thread(
 							state.time = time;
 						}
 						mpv.set_property("pause", true)?;
-						mpv.seek(time, mpvipc::SeekOptions::Absolute)?;
+						// mpv.seek(time, mpvipc::SeekOptions::Absolute)?; // Not exact seek?
+						// mpv.set_property("playback-time", time)?; // Doesn't show OSD
+						mpv.run_command_raw2(&["osd-auto", "seek"], &[
+							&time.to_string(),
+							"absolute+exact"
+						])?;
 					},
 					WsMessage::Ping(s) => {
 						ws.send(Message::text(serde_json::to_string(&WsMessage::Pong(s)).unwrap())).await?;
@@ -134,12 +149,14 @@ pub fn client(
 	relay_room: String,
 	client_sock: String,
 ) -> anyhow::Result<()> {
+	let verbosity = log::LevelFilter::Debug;
 	flexi_logger::Logger::with(
 		flexi_logger::LogSpecification::builder()
 			.default(verbosity)
 			.module("mpvipc", log::LevelFilter::Error)
 			.build(),
 	)
+	.format(flexi_logger::detailed_format)
 	.log_to_stdout()
 	.log_to_file(flexi_logger::FileSpec::default())
 	// .log_to_file(flexi_logger::FileSpec::try_from("simulcast.log")?)
@@ -185,20 +202,21 @@ pub fn client(
 		.enable_all()
 		.worker_threads(2)
 		.build()?;
+	let relay_room_clone = relay_room.to_owned();
 	rt.spawn(async move {
 		loop {
 			let state = state_ws.clone();
-			let err = ws_thread(relay_url.to_string(), &relay_room, &mpv_ws, &mut receiver, state).await;
+			let err = ws_thread(relay_url.to_string(), &relay_room_clone, &mpv_ws, &mut receiver, state).await;
 			if let Err(err) = err {
 				error!("{:?}", err);
 			}
 		}
 	});
 
-	let track: String = mpv.get_property("media-title")?;
+	let track: String = mpv.get_property("filename")?;
 	info!("track = '{track}'");
 
-	mpv.observe_property(1, "media-title")?;
+	mpv.observe_property(1, "filename")?;
 	mpv.observe_property(2, "pause")?;
 	mpv.observe_property(3, "playback-time")?;
 	mpv.observe_property(4, "user-data/simulcast/fuckmpv")?;
@@ -211,11 +229,12 @@ pub fn client(
 			Event::Unimplemented => {}
 			Event::PropertyChange { id: _, property } => match property {
 				Property::Pause(paused) => {
-					let time: f64 = mpv.get_property("playback-time")?;
-
-					let mut state = state.lock().unwrap();
-
 					info!("pause called");
+
+					let Ok(time) = mpv.get_property("playback-time/full") else {
+						continue;
+					};
+					let mut state = state.lock().unwrap();
 
 					if paused == state.paused {
 						continue;
@@ -228,7 +247,7 @@ pub fn client(
 						continue;
 					}
 
-					info!("about to do stuff. state={}, new={}", state.paused, paused);
+					info!("about to do pause stuff. state={}, new={}", state.paused, paused);
 
 					state.paused = true;
 					drop(state);
@@ -242,7 +261,9 @@ pub fn client(
 					}
 				}
 				Property::Unknown { name, data } => match name.as_str() {
-					"media-title" => {}
+					"filename" => {
+						let _ = sender.send(WsMessage::Join(room_id(&mpv, &relay_room)?));
+					}
 					"user-data/simulcast/fuckmpv" => {
 						let MpvDataType::String(data) = data else {
 							// tf?
@@ -262,7 +283,7 @@ pub fn client(
 								continue;
 							}
 
-							// let time: f64 = mpv.get_property("playback-time")?;
+							// let time: f64 = mpv.get_property("playback-time/full")?;
 							// sender.send(WsMessage::AbsoluteSeek(time))?;
 							let _ = sender.send(WsMessage::Resume);
 						}
@@ -280,8 +301,15 @@ pub fn client(
 				_ => {}
 			},
 			Event::Seek => {
-				let time: f64 = mpv.get_property("playback-time")?;
+				// This is dumb but necessary. We need *some* wait here otherwise it's desynced.
+				// Related place to edit in server.rs. Ctrl+f "BROCCOLI".
+				std::thread::sleep(Duration::from_millis(100));
+
+				let time: f64 = mpv.get_property("playback-time/full")?;
+				let paused: bool = mpv.get_property("pause")?;
 				let mut state = state.lock().unwrap();
+
+				info!("Event::Seek. time = {}. expected = {}", time, state.time);
 
 				if (time - state.time).abs() > 0.03 {
 					// seems like we seeked...
@@ -295,11 +323,10 @@ pub fn client(
 
 					drop(state);
 
-					if party_count > 1 {
+					if party_count > 1 && !paused {
 						mpv.set_property("pause", true)?;
 					}
 
-					let time: f64 = mpv.get_property("playback-time")?; // get it again, just in case lol
 					if party_count > 1 {
 						let _ = sender.send(WsMessage::AbsoluteSeek(time));
 					}
