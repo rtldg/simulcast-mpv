@@ -10,7 +10,6 @@ This isn't bug-free and I probably won't do anything to fix that.
 - setup public relay server (fly.io?)
 - precompiled binaries for x86-64 Windows, x86-64 Linux, 64-bit ARM Linux.
 - some logic bug somewhere for the pause/unpause on connect...
-- Requires [this](https://github.com/rtldg/mpvipc) crate at `../mpvipc` to work. It will be added as a pinned github url eventually.
 
 ### similar projects (for mpv)
 - Syncplay: [website](https://syncplay.pl/) / [github](https://github.com/Syncplay/syncplay)

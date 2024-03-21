@@ -853,6 +853,7 @@ dependencies = [
 [[package]]
 name = "mpvipc"
 version = "1.3.0"
+source = "git+https://github.com/rtldg/mpvipc.git?rev=dfd02e0d19#dfd02e0d19bfa6d91978c1e76df04a5c1e16dd7a"
 dependencies = [
  "interprocess",
  "log",
