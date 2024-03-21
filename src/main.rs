@@ -33,7 +33,7 @@ enum Commands {
 		#[arg(
 			long,
 			env = "SIMULCAST_RELAY_URL",
-			default_value = "wss://simulcast.example.org/relay"
+			default_value = "wss://simulcast-mpv.fly.dev/"
 		)]
 		relay_url: http::Uri,
 		/// The room/code for both users to use for synchronizing.
