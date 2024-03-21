@@ -1,32 +1,48 @@
-# fly.toml file generated for holy-grass-8371 on 2021-04-06T14:31:33-04:00
+# fly.toml app configuration file generated for simulcast-mpv on 2024-03-21T20:45:10Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "simulcast-mpv"
+app = 'simulcast-mpv'
+primary_region = 'iad'
+kill_signal = 'SIGINT'
+kill_timeout = '5s'
 
-kill_signal = "SIGINT"
-kill_timeout = 5
+[build]
 
 [env]
-PORT = "8080"
+  PORT = '8080'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
 [[services]]
-internal_port = 8080
-protocol = "tcp"
-
-[services.concurrency]
-hard_limit = 25
-soft_limit = 20
+  protocol = 'tcp'
+  internal_port = 8080
 
 [[services.ports]]
-handlers = ["http"]
-port = "80"
+    port = 80
+    handlers = ['http']
 
 [[services.ports]]
-handlers = ["tls", "http"]
-port = "443"
+    port = 443
+    handlers = ['tls', 'http']
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
 
 [[services.tcp_checks]]
-grace_period = "1s"
-interval = "15s"
-port = "8080"
-restart_limit = 6
-timeout = "2s"
+    interval = '15s'
+    timeout = '2s'
+    grace_period = '1s'
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
