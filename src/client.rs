@@ -196,7 +196,6 @@ pub fn client(
 		paused: false,
 		time: 0.0,
 	}));
-	let state_ws = state.clone();
 
 	let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
 
@@ -205,12 +204,23 @@ pub fn client(
 		.worker_threads(2)
 		.build()?;
 	let relay_room_clone = relay_room.to_owned();
+	let state_ws = state.clone();
 	rt.spawn(async move {
 		loop {
-			let state = state_ws.clone();
-			let err = ws_thread(relay_url.to_string(), &relay_room_clone, &mpv_ws, &mut receiver, state).await;
+			let err = ws_thread(
+				relay_url.to_string(),
+				&relay_room_clone,
+				&mpv_ws,
+				&mut receiver,
+				state_ws.clone(),
+			)
+			.await;
 			if let Err(err) = err {
 				error!("{:?}", err);
+			}
+			{
+				let mut state = state_ws.lock().unwrap();
+				state.party_count = 0;
 			}
 		}
 	});
@@ -264,6 +274,10 @@ pub fn client(
 				}
 				Property::Unknown { name, data } => match name.as_str() {
 					"filename" => {
+						{
+							let mut state = state.lock().unwrap();
+							state.party_count = 0;
+						}
 						let _ = sender.send(WsMessage::Join(room_id(&mpv, &relay_room)?));
 					}
 					"user-data/simulcast/fuckmpv" => {
