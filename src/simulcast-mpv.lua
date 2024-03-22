@@ -59,15 +59,23 @@ local function setup_keybinds()
 end
 
 local function setup_ipc_socket(dev)
-	local client_sock = "mpvsock" .. mp.get_property("pid", "0")
+	local client_sock = mp.get_property("input-ipc-server")
+	if client_sock and client_sock:len() > 0 then
+		return client_sock
+	end
+
 	if dev then
 		client_sock = "mpvsock42"
+	else
+		client_sock = "mpvsock" .. mp.get_property("pid", "0")
 	end
+
 	if platform == "windows" then
 		mp.set_property("input-ipc-server", "\\\\.\\pipe\\"..client_sock)
 	else
 		mp.set_property("input-ipc-server", "/tmp/"..client_sock)
 	end
+
 	return client_sock
 end
 
@@ -92,8 +100,8 @@ local DEV = false
 local timer = setup_heartbeat()
 setup_keybinds()
 local mpvsock = setup_ipc_socket(DEV)
-mp.osd_message(mpvsock, 5.0)
-if not DEV then
+if DEV then
+	mp.osd_message(mpvsock, 5.0)
+else
 	local async_abort_table = start_executable(mpvsock)
 end
-

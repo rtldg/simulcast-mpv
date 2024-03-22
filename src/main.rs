@@ -30,15 +30,11 @@ struct Cli {
 enum Commands {
 	Client {
 		/// Relay-server used by both users for synchronization
-		#[arg(
-			long,
-			env = "SIMULCAST_RELAY_URL",
-			default_value = "wss://simulcast-mpv.fly.dev/"
-		)]
+		#[arg(long, env = "SIMULCAST_RELAY_URL", default_value = "wss://simulcast-mpv.fly.dev/")]
 		relay_url: http::Uri,
 		/// The room/code for both users to use for synchronizing.
 		/// Rooms are based on the media-title/file-name so you could edit this for a little bit of "salt"
-		#[arg(long, env = "SIMULCAST_RELAY_ROOM", default_value = "abc123")]
+		#[arg(long, env = "SIMULCAST_RELAY_ROOM", default_value = "abcd1234")]
 		relay_room: String,
 		/// mpv's socket path (input-ipc-server) that we connect to.
 		#[arg(long, env = "SIMULCAST_CLIENT_SOCK")]
@@ -46,22 +42,22 @@ enum Commands {
 	},
 	Relay {
 		/// Address to bind to
-		#[arg(long, default_value = "127.0.0.1")]
+		#[arg(long, env = "SIMULCAST_BIND_ADDRESS", default_value = "127.0.0.1")]
 		bind_address: std::net::IpAddr,
 		/// Port to bind to
-		#[arg(long, default_value_t = 30777)]
+		#[arg(long, env = "SIMULCAST_BIND_PORT", default_value_t = 30777)]
 		bind_port: u16,
 	},
 }
 
 fn main() -> anyhow::Result<()> {
-	// Hopefully load "mpv/scripts/.env".
+	// Hopefully load "mpv/scripts/simulcast-mpv.env".
 	if let Ok(mut p) = std::env::current_exe() {
-		p.set_file_name(".env");
+		p.set_file_name("simulcast-mpv.env");
 		let _ = dotenvy::from_path(&p);
 	}
-	// Load "$PWD/.env" (which probably doesn't exist).
-	let _ = dotenvy::dotenv();
+	// Load "$PWD/simulcast-mpv.env" (which probably doesn't exist).
+	let _ = dotenvy::from_filename_override("simulcast-mpv.env");
 
 	let args = Cli::parse();
 

@@ -12,6 +12,7 @@
 
 // cargo run --release -- client --client-sock mpvsock42
 
+// cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.17
 // cargo +1.75 build --release
 // rustup override set 1.75 # last version before win7 support died
 
@@ -41,9 +42,8 @@ struct SharedState {
 }
 
 fn room_id(mpv: &Mpv, relay_room: &str) -> Result<String, mpvipc::Error> {
-	let title_or_file = mpv.get_property_string("filename")? + relay_room;
-	// We don't want the server to see media titles...
-	Ok(blake3::hash(title_or_file.as_bytes()).to_hex().to_string())
+	let id = mpv.get_property_string("filename")? + relay_room;
+	Ok(blake3::hash(id.as_bytes()).to_hex().to_string())
 }
 
 async fn ws_thread(
@@ -149,17 +149,18 @@ pub fn client(
 	relay_room: String,
 	client_sock: String,
 ) -> anyhow::Result<()> {
-	let verbosity = log::LevelFilter::Debug;
+	let verbosity = if true { log::LevelFilter::Debug } else { verbosity };
 	flexi_logger::Logger::with(
 		flexi_logger::LogSpecification::builder()
 			.default(verbosity)
 			.module("mpvipc", log::LevelFilter::Error)
 			.module("rustls", log::LevelFilter::Warn)
+			.module("tungstenite", log::LevelFilter::Warn)
 			.build(),
 	)
 	.format(flexi_logger::detailed_format)
 	.log_to_stdout()
-	.log_to_file(flexi_logger::FileSpec::default())
+	.log_to_file(flexi_logger::FileSpec::default().directory(std::env::temp_dir()))
 	// .log_to_file(flexi_logger::FileSpec::try_from("simulcast.log")?)
 	.start()?;
 	// simple_logging::log_to_file("out.log", verbosity)?;
@@ -214,8 +215,8 @@ pub fn client(
 		}
 	});
 
-	let track: String = mpv.get_property("filename")?;
-	info!("track = '{track}'");
+	let file: String = mpv.get_property("filename")?;
+	info!("file = '{file}'");
 
 	mpv.observe_property(1, "filename")?;
 	mpv.observe_property(2, "pause")?;
