@@ -21,7 +21,7 @@ The `simulcast-mpv` executable has 3 "modes":
     - A websocket server
 
 ## **TODO:**
-- precompiled binaries for x86-64 Windows, x86-64 Linux, 64-bit ARM Linux.
+- setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
 - some logic bug somewhere for the pause/unpause on connect...
 
 ## similar projects (for mpv)
