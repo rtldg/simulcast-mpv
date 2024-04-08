@@ -163,15 +163,20 @@ async fn ws_thread(
 
 fn spawn_input_reader(client_sock: String) -> anyhow::Result<()> {
 	let exe = std::env::current_exe()?;
-	if cfg!(windows) {
+	#[cfg(windows)]
+	{
 		const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 		let _ = std::process::Command::new(exe)
 			.args(&["input-reader", "--client-sock", &client_sock])
 			.creation_flags(CREATE_NEW_CONSOLE)
 			.spawn()?
 			.wait()?;
-	} else {
+	}
+	#[cfg(not(windows))]
+	{
 		// TODO... Spawn xterm maybe...
+		let _ = exe;
+		let _ = client_sock;
 	}
 	Ok(())
 }

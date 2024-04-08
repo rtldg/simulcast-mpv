@@ -26,6 +26,7 @@ The `simulcast-mpv` executable has 4 "modes":
 ## **TODO:**
 - setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
     - `cargo +1.75 build --release` (for Windows 7 support)
+    - `cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.17`
 - some logic bug somewhere for the pause/unpause on connect...
 - Link to simulcast-mpv source-code (repository) in Hello message from the server?
     - log to stdout and log file...
