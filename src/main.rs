@@ -9,7 +9,6 @@ mod server;
 
 use clap::{Parser, Subcommand};
 use log::info;
-#[allow(unused_imports)] // for when I'm testing and have the "Press any key" disabled
 use std::io::Read;
 
 #[derive(Debug, Parser)]
@@ -48,6 +47,11 @@ enum Commands {
 		#[arg(long, env = "SIMULCAST_BIND_PORT", default_value_t = 30777)]
 		bind_port: u16,
 	},
+	InputReader {
+		/// mpv's socket path (input-ipc-server) that we connect to.
+		#[arg(long, env = "SIMULCAST_CLIENT_SOCK")]
+		client_sock: String,
+	},
 }
 
 fn main() -> anyhow::Result<()> {
@@ -72,12 +76,23 @@ fn main() -> anyhow::Result<()> {
 				relay_room,
 				client_sock,
 			} => client::client(args.verbose.log_level_filter(), relay_url, relay_room, client_sock),
+			Commands::InputReader { client_sock } => input_reader(client_sock),
 		}
 	} else {
 		install()
 	};
 	info!("{:?}", res);
 	res
+}
+
+fn input_reader(client_sock: String) -> anyhow::Result<()> {
+	let mpv = mpvipc::Mpv::connect(&client_sock)?;
+	println!("Please input a special room code (or nothing, to reset) then hit enter:");
+	// std::io::stdout().flush().unwrap();
+	let mut code = String::new();
+	let _ = std::io::stdin().read_line(&mut code).unwrap();
+	let _ = mpv.set_property("user-data/simulcast/input_reader", code.trim().to_string());
+	Ok(())
 }
 
 fn install() -> anyhow::Result<()> {

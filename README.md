@@ -11,18 +11,26 @@ This isn't bug-free and I probably won't do anything to fix that.
 - [Download](https://github.com/rtldg/simulcast-mpv/releases) `simulcast-mpv`
 - Run `simulcast-mpv`. It will install itself.
 - Start mpv. It should just work™.
+- (optional) Hit `a` once to show some info. Hit `a` a few times really fast to open up an input window for custom room codes. (Maybe you and your friend are watching the same thing, but your file names are different.)
 
-The `simulcast-mpv` executable has 3 "modes":
+The `simulcast-mpv` executable has 4 "modes":
 - `simulcast-mpv`
     - This "installs" `simulcast-mpv` to your mpv scripts directory (`%APPDATA%\mpv\scripts` or `~/.config/mpv/scripts`). It also writes a helper lua script (`simulcast-mpv.lua`) to the directory.
 - `simulcast-mpv client`
     - This is ran when mpv starts. It acts as a middle-man for sending pause/resume/seek messages between mpv and the relay server.
 - `simulcast-mpv relay`
     - A websocket server
+- `simulcast-mpv input-reader`
+    - A popup command prompt window for inputting custom room codes.
 
 ## **TODO:**
 - setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
+    - `cargo +1.75 build --release` (for Windows 7 support)
 - some logic bug somewhere for the pause/unpause on connect...
+- Link to simulcast-mpv source-code (repository) in Hello message from the server?
+    - log to stdout and log file...
+- Make lots of IPC connections so we don't eat events from mpv when trying to query properties.
+    - Drop `mpvipc` dependency if this is done?
 
 ## similar projects (for mpv)
 - Syncplay: [website](https://syncplay.pl/) / [github](https://github.com/Syncplay/syncplay)

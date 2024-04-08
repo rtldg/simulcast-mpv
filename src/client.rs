@@ -21,6 +21,8 @@ use log::debug;
 use log::error;
 use log::info;
 use mpvipc::MpvDataType;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -39,11 +41,13 @@ struct SharedState {
 	party_count: u32,
 	paused: bool,
 	time: f64,
+	room_code: String,
+	room_hash: String,
 }
 
-fn room_id(mpv: &Mpv, relay_room: &str) -> Result<String, mpvipc::Error> {
-	let id = mpv.get_property_string("filename")? + relay_room;
-	Ok(blake3::hash(id.as_bytes()).to_hex().to_string())
+fn get_room_hash(mut code: String, relay_room: &str) -> String {
+	code.push_str(relay_room);
+	blake3::hash(code.as_bytes()).to_hex().to_string()
 }
 
 async fn ws_thread(
@@ -55,16 +59,30 @@ async fn ws_thread(
 ) -> anyhow::Result<()> {
 	info!("ws_thread!");
 
+	while receiver.try_recv() != Err(tokio::sync::mpsc::error::TryRecvError::Empty) {
+		// nom nom nom. eat messages.
+	}
+
 	let (mut ws, _) = tokio_tungstenite::connect_async(relay_url)
 		.await
 		.context("Failed to setup websocket connection")?;
 
 	info!("connected to websocket");
 
-	ws.send(Message::Text(
-		serde_json::to_string(&WsMessage::Join(room_id(mpv, relay_room)?)).unwrap(),
-	))
-	.await?;
+	{
+		let room_code = {
+			let state = state.lock().unwrap();
+			state.room_code.clone()
+		};
+		let room = if room_code.is_empty() {
+			mpv.get_property_string("filename")?
+		} else {
+			room_code
+		};
+		let joinmsg = WsMessage::Join(get_room_hash(room, relay_room));
+		debug!("send msg = {joinmsg:?}");
+		ws.send(Message::Text(serde_json::to_string(&joinmsg).unwrap())).await?;
+	}
 
 	loop {
 		tokio::select! {
@@ -107,7 +125,7 @@ async fn ws_thread(
 
 							let _ = mpv.run_command(MpvCommand::ShowText {
 								text: format!("party count: {count}"),
-								duration_ms: Some(1000),
+								duration_ms: Some(2000),
 								level: None,
 							});
 						}
@@ -141,6 +159,21 @@ async fn ws_thread(
 			}
 		}
 	}
+}
+
+fn spawn_input_reader(client_sock: String) -> anyhow::Result<()> {
+	let exe = std::env::current_exe()?;
+	if cfg!(windows) {
+		const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+		let _ = std::process::Command::new(exe)
+			.args(&["input-reader", "--client-sock", &client_sock])
+			.creation_flags(CREATE_NEW_CONSOLE)
+			.spawn()?
+			.wait()?;
+	} else {
+		// TODO... Spawn xterm maybe...
+	}
+	Ok(())
 }
 
 pub fn client(
@@ -183,18 +216,24 @@ pub fn client(
 
 	info!("mpv objects setup...");
 
+	let heartbeat_sock = client_sock.clone();
 	let _ = std::thread::spawn(move || {
-		let mpv_heartbeat = Mpv::connect(&client_sock).unwrap();
+		let mpv_heartbeat = Mpv::connect(&heartbeat_sock).unwrap();
 		for i in 1..usize::MAX {
 			std::thread::sleep(Duration::from_secs_f64(0.1));
 			mpv_heartbeat.set_property("user-data/simulcast/heartbeat", i).unwrap();
 		}
 	});
 
+	let file: String = mpv.get_property("filename")?;
+	info!("file = '{file}'");
+
 	let state = Arc::new(Mutex::new(SharedState {
 		party_count: 0,
 		paused: false,
 		time: 0.0,
+		room_code: String::new(),
+		room_hash: get_room_hash(file, &relay_room),
 	}));
 
 	let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
@@ -225,15 +264,15 @@ pub fn client(
 		}
 	});
 
-	let file: String = mpv.get_property("filename")?;
-	info!("file = '{file}'");
-
 	mpv.observe_property(1, "filename")?;
 	mpv.observe_property(2, "pause")?;
 	mpv.observe_property(3, "playback-time")?;
 	mpv.observe_property(4, "user-data/simulcast/fuckmpv")?;
+	mpv.observe_property(5, "user-data/simulcast/input_reader")?;
 
 	// let mut tick = 0;
+	#[allow(non_snake_case)]
+	let (mut A_spam_last, mut A_spam_count) = (std::time::SystemTime::now(), 0);
 
 	loop {
 		match mpv.event_listen()? {
@@ -274,11 +313,23 @@ pub fn client(
 				}
 				Property::Unknown { name, data } => match name.as_str() {
 					"filename" => {
-						{
+						let room_hash = {
 							let mut state = state.lock().unwrap();
 							state.party_count = 0;
-						}
-						let _ = sender.send(WsMessage::Join(room_id(&mpv, &relay_room)?));
+							if !state.room_code.is_empty() {
+								// The roomid should:tm: still be valid.
+								continue;
+							} else {
+								match data {
+									MpvDataType::String(s) => {
+										state.room_hash = get_room_hash(s, &relay_room);
+									}
+									_ => (),
+								}
+							}
+							state.room_hash.clone()
+						};
+						let _ = sender.send(WsMessage::Join(room_hash));
 					}
 					"user-data/simulcast/fuckmpv" => {
 						let MpvDataType::String(data) = data else {
@@ -302,7 +353,49 @@ pub fn client(
 							// let time: f64 = mpv.get_property("playback-time/full")?;
 							// sender.send(WsMessage::AbsoluteSeek(time))?;
 							let _ = sender.send(WsMessage::Resume);
+						} else if data == "print_info" {
+							if A_spam_last.elapsed()? > Duration::from_secs(2) {
+								A_spam_count = 0;
+							}
+
+							A_spam_count += 1;
+							A_spam_last = std::time::SystemTime::now();
+
+							if A_spam_count > 3 {
+								let input_reader_sock = client_sock.clone();
+								let _ = std::thread::spawn(|| spawn_input_reader(input_reader_sock));
+								// do prompt for custom room code...
+							}
+
+							// holy shit I hate Lua
+							let (party_count, room_code, room_hash) = {
+								let state = state.lock().unwrap();
+								(state.party_count, state.room_code.clone(), state.room_hash.clone())
+							};
+							let _ = mpv.run_command(MpvCommand::ShowText {
+								text: format!("SIMULCAST\nparty count = {party_count}\ncustom room code = '{room_code}'\nroom id/hash = {room_hash}"),
+								duration_ms: Some(7000),
+								level: None,
+							});
 						}
+					}
+					"user-data/simulcast/input_reader" => {
+						let MpvDataType::String(data) = data else {
+							// tf?
+							continue;
+						};
+
+						let room_hash = {
+							let mut state = state.lock().unwrap();
+							state.room_code = data;
+							if !state.room_code.is_empty() {
+								state.room_hash = get_room_hash(state.room_code.clone(), &relay_room);
+							} else {
+								state.room_hash = get_room_hash(mpv.get_property_string("filename")?, &relay_room);
+							}
+							state.room_hash.clone()
+						};
+						let _ = sender.send(WsMessage::Join(room_hash));
 					}
 					_ => {}
 				},

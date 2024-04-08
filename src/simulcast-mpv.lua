@@ -4,6 +4,7 @@
 ---------------------------------------------------------------------------------------
 --                                     WARNING                                       --
 -- This file will be overwritten whenever you run simulcast-mpv without arguments!!! --
+--           That means when you install new versions of simulcast-mpv!!!            --
 --                                   BE CAREFUL!!                                    --
 ---------------------------------------------------------------------------------------
 
@@ -48,13 +49,17 @@ local function setup_keybinds()
 	mp.add_forced_key_binding("space", pause_toggle)
 	mp.add_forced_key_binding("p", pause_toggle)
 
-	mp.add_key_binding("a", "simulcast-toggle", function()
+	mp.add_key_binding("a", "simulcast-info", function()
+		-- TODO: Spam `a` a few times to open a prompt to accept a custom roomid.
+		mp.set_property("user-data/simulcast/fuckmpv", "print_info")
+		--[[
 		SIMULCAST_ENABLED = not SIMULCAST_ENABLED
 		if not SIMULCAST_ENABLED then
 			-- TODO: doesn't do anything yet... lol...
 			mp.set_property("user-data/simulcast/fuckmpv", "disabled")
 		end
 		mp.osd_message("SIMULCAST " .. (SIMULCAST_ENABLED and "ON" or "OFF"), 2.0)
+		]]
 	end)
 end
 
@@ -105,3 +110,14 @@ if DEV then
 else
 	local async_abort_table = start_executable(mpvsock)
 end
+
+--[[
+-- testing
+mp.command_native_async(
+	{name="subprocess", args={mp.command_native({"expand-path", "~~home/"}) .. "/scripts/simulcast-mpv.exe", "input-reader"}, detach=true,},
+	function(success, result, error)
+		--mp.osd_message("simulcast success = "..tostring(success).." | result = "..tostring(result).." | error = "..tostring(error), 10)
+	end
+)
+]]
+
