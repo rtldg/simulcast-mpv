@@ -324,11 +324,11 @@ pub fn client(
 					"filename" => {
 						let room_hash = {
 							let mut state = state.lock().unwrap();
-							state.party_count = 0;
 							if !state.room_code.is_empty() {
 								// The roomid should:tm: still be valid.
 								continue;
 							} else {
+								state.party_count = 0;
 								match data {
 									MpvDataType::String(s) => {
 										state.room_hash = get_room_hash(s, &relay_room);
