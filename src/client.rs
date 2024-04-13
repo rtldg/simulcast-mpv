@@ -280,7 +280,8 @@ pub fn client(
 
 	// let mut tick = 0;
 	#[allow(non_snake_case)]
-	let (mut A_spam_last, mut A_spam_count) = (std::time::SystemTime::now(), 0);
+	let (mut A_spam_last, mut A_spam_count, mut A_spam_cooldown) =
+		(std::time::SystemTime::now(), 0, std::time::SystemTime::UNIX_EPOCH);
 
 	loop {
 		match mpv_events.event_listen()? {
@@ -364,12 +365,14 @@ pub fn client(
 						} else if data == "print_info" {
 							if A_spam_last.elapsed()? > Duration::from_secs(2) {
 								A_spam_count = 0;
+								A_spam_cooldown = std::time::SystemTime::UNIX_EPOCH;
 							}
 
 							A_spam_count += 1;
 							A_spam_last = std::time::SystemTime::now();
 
-							if A_spam_count > 3 {
+							if A_spam_count > 3 && A_spam_cooldown.elapsed()? > Duration::from_secs(2) {
+								A_spam_cooldown = std::time::SystemTime::now();
 								let input_reader_sock = client_sock.clone();
 								let _ = std::thread::spawn(|| spawn_input_reader(input_reader_sock));
 								// do prompt for custom room code...
