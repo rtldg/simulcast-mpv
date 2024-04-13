@@ -30,8 +30,7 @@ The `simulcast-mpv` executable has 4 "modes":
 - some logic bug somewhere for the pause/unpause on connect...
 - Link to simulcast-mpv source-code (repository) in Hello message from the server?
     - log to stdout and log file...
-- Make lots of IPC connections so we don't eat events from mpv when trying to query properties.
-    - Drop `mpvipc` dependency if this is done?
+- Drop `mpvipc` dependency?
 
 ## similar projects (for mpv)
 - Syncplay: [website](https://syncplay.pl/) / [github](https://github.com/Syncplay/syncplay)
