@@ -119,7 +119,7 @@ fn install() -> anyhow::Result<()> {
 		let _ = std::fs::copy(std::env::current_exe()?, target_exe)?;
 	}
 
-	println!("Press any key to continue...");
+	println!("Press ENTER to exit...");
 	let _ = std::io::stdin().read(&mut [0u8]).unwrap();
 
 	Ok(())
