@@ -183,7 +183,7 @@ fn spawn_input_reader(client_sock: String) -> anyhow::Result<()> {
 
 pub fn client(
 	verbosity: log::LevelFilter,
-	relay_url: http::Uri,
+	relay_url: Option<http::Uri>,
 	relay_room: String,
 	client_sock: String,
 ) -> anyhow::Result<()> {
@@ -202,6 +202,18 @@ pub fn client(
 	// .log_to_file(flexi_logger::FileSpec::try_from("simulcast.log")?)
 	.start()?;
 	// simple_logging::log_to_file("out.log", verbosity)?;
+
+	let relay_url = if relay_url.is_none() {
+		reqwest::blocking::get("https://rtldg.github.io/simulcast-mpv/servers.txt")?
+			.text()?
+			.lines()
+			.next()
+			.unwrap()
+			.trim()
+			.parse()?
+	} else {
+		relay_url.unwrap()
+	};
 
 	// TODO: Throw error messages up on mpv's screen too...
 	if relay_url.host().is_none() {

@@ -28,9 +28,10 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
 	Client {
-		/// Relay-server used by both users for synchronization
-		#[arg(long, env = "SIMULCAST_RELAY_URL", default_value = "wss://simulcast-mpv.fly.dev/")]
-		relay_url: http::Uri,
+		/// Relay-server used by both users for synchronization.
+		/// If this is empty then it'll read the server from https://github.com/rtldg/simulcast-mpv/blob/master/docs/servers.txt
+		#[arg(long, env = "SIMULCAST_RELAY_URL")]
+		relay_url: Option<http::Uri>,
 		/// The room/code for both users to use for synchronizing.
 		/// Rooms are based on the media-title/file-name so you could edit this for a little bit of "salt"
 		#[arg(long, env = "SIMULCAST_RELAY_ROOM", default_value = "abcd1234")]

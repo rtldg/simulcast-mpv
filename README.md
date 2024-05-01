@@ -43,7 +43,7 @@ The `simulcast-mpv` executable has 4 "modes":
 `simulcast-mpv` allows environment variables and files to configure some of the settings.
 
 client
-- `SIMULCAST_RELAY_URL` / `--relay-url` (default `wss://..../`)
+- `SIMULCAST_RELAY_URL` / `--relay-url` (default: reads the server from [here](https://github.com/rtldg/simulcast-mpv/blob/master/docs/servers.txt))
 - `SIMULCAST_RELAY_ROOM` / `--relay-room` (default `abcd1234`)
 - `SIMULCAST_CLIENT_SOCK` / `--client-sock` (passed by mpv to the simulcast-mpv executable)
 server
