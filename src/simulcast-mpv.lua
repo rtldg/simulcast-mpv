@@ -78,7 +78,8 @@ local function setup_ipc_socket(dev)
 	if platform == "windows" then
 		mp.set_property("input-ipc-server", "\\\\.\\pipe\\"..client_sock)
 	else
-		mp.set_property("input-ipc-server", "/tmp/"..client_sock)
+		client_sock = "/tmp/" .. client_sock
+		mp.set_property("input-ipc-server", client_sock)
 	end
 
 	return client_sock
