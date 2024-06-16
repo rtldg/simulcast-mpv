@@ -246,7 +246,8 @@ pub fn client(
 
 	// I was originally testing with hardcoded socket names but a typo that put me back an hour...
 	// Commands, get/set_property will eat events in the queue so let's separate the sockets...
-	let mut mpv_events = Mpv::connect(&client_sock).context(format!("failed to connect to mpv socket '{}'", client_sock))?;
+	let mut mpv_events =
+		Mpv::connect(&client_sock).context(format!("failed to connect to mpv socket '{}'", client_sock))?;
 	let mpv_query = Mpv::connect(&client_sock)?;
 	//
 	let mpv_ws = Mpv::connect(&client_sock)?;
