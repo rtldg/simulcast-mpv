@@ -206,7 +206,19 @@ pub fn client(
 	let relay_url = if relay_url.is_none() {
 		// TODO: check list of urls to see if they're alive?
 		info!("querying server from https://rtldg.github.io/simulcast-mpv/servers.txt ...");
-		reqwest::blocking::get("https://rtldg.github.io/simulcast-mpv/servers.txt")?
+		// github.io url used because it's cdn-backed and probably won't bother github too much if we fetch it all the time
+		reqwest::blocking::Client::new()
+			.get("https://rtldg.github.io/simulcast-mpv/servers.txt")
+			.header(
+				"user-agent",
+				format!(
+					"{}/{} ({})",
+					env!("CARGO_PKG_NAME"),
+					env!("CARGO_PKG_VERSION"),
+					env!("CARGO_PKG_REPOSITORY")
+				),
+			)
+			.send()?
 			.text()?
 			.lines()
 			.next()
