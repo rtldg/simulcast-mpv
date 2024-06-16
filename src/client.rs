@@ -203,6 +203,9 @@ pub fn client(
 	.start()?;
 	// simple_logging::log_to_file("out.log", verbosity)?;
 
+	// TODO: include git revision...?
+	info!("simulcast-mpv version {}!", env!("CARGO_PKG_VERSION"));
+
 	let relay_url = if relay_url.is_none() {
 		// TODO: check list of urls to see if they're alive?
 		info!("querying server from https://rtldg.github.io/simulcast-mpv/servers.txt ...");
