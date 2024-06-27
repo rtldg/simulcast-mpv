@@ -4,8 +4,6 @@ I was curious how easy it would be to sync two mpv players across the internet, 
 If one person pauses, then pause for the other person. Add in some ping calculation between clients.
 That's basically what `simulcast-mpv` is.
 
-This isn't bug-free and I probably won't do anything to fix that.
-
 ## Usage
 **TL;DR:**
 - [Download](https://github.com/rtldg/simulcast-mpv/releases) `simulcast-mpv`
@@ -27,10 +25,11 @@ The `simulcast-mpv` executable has 4 "modes":
 - setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
     - `cargo +1.75 build --release` (for Windows 7 support)
     - `cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.17`
-- some logic bug somewhere for the pause/unpause on connect...
+- better logic to sync the position when someone joins a party (other than having an existing user just seek backwards from their position by 5s (which will sync the new user)...)
 - Link to simulcast-mpv source-code (repository) in Hello message from the server?
     - log to stdout and log file...
 - Drop `mpvipc` dependency?
+- Better portable-install-config-directory handling...
 
 ## similar projects (for mpv)
 - Syncplay: [website](https://syncplay.pl/) / [github](https://github.com/Syncplay/syncplay)
@@ -46,7 +45,6 @@ client
 - `SIMULCAST_RELAY_URL` / `--relay-url` (default: reads the server from [here](https://github.com/rtldg/simulcast-mpv/blob/master/docs/servers.txt))
 - `SIMULCAST_RELAY_ROOM` / `--relay-room` (default `abcd1234`)
 - `SIMULCAST_CLIENT_SOCK` / `--client-sock` (passed by mpv to the simulcast-mpv executable)
-server
 - `SIMULCAST_BIND_ADDRESS` / `--bind-address` (default `127.0.0.1`)
 - `SIMULCAST_BIND_PORT` / `--bind-port` (default `30777`)
 
