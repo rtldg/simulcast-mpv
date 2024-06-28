@@ -68,10 +68,10 @@ async fn handle_websocket_inner(
 	let ws = tokio_tungstenite::accept_async_with_config(
 		stream,
 		Some(WebSocketConfig {
-			max_send_queue: None,
 			max_message_size: Some(512),
 			max_frame_size: Some(800),
 			accept_unmasked_frames: false,
+			..Default::default()
 		}),
 	)
 	.await?;
