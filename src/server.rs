@@ -8,7 +8,7 @@ use std::{
 	borrow::BorrowMut,
 	collections::HashMap,
 	ops::DerefMut,
-	sync::{atomic::AtomicU64, Arc, Mutex},
+	sync::{Arc, Mutex},
 	time::Duration,
 };
 
@@ -225,14 +225,14 @@ async fn async_server(addr: std::net::SocketAddr) -> anyhow::Result<()> {
 	println!("listening on {addr}");
 
 	let rooms = Arc::new(Mutex::new(HashMap::<String, Room>::new()));
-	let latest_id = AtomicU64::new(1);
+	let mut latest_id = 0;
 
 	loop {
 		if let Ok((stream, addr)) = listener.accept().await {
-			let id = latest_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+			latest_id += 1;
 			let rooms = rooms.clone();
-			println!("accepted client {id} {addr}");
-			tokio::spawn(handle_websocket(stream, id, addr, rooms));
+			println!("accepted client {latest_id} {addr}");
+			tokio::spawn(handle_websocket(stream, latest_id, addr, rooms));
 		}
 	}
 }
