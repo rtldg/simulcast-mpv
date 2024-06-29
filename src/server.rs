@@ -224,7 +224,7 @@ async fn async_server(addr: std::net::SocketAddr) -> anyhow::Result<()> {
 	let listener = tokio::net::TcpListener::bind(addr).await?;
 	println!("listening on {addr}");
 
-	let rooms = Arc::new(Mutex::new(HashMap::<String, Room>::new()));
+	let rooms: Rooms = Default::default();
 	let mut latest_id = 0;
 
 	loop {
