@@ -23,8 +23,9 @@ The `simulcast-mpv` executable has 4 "modes":
 
 ## **TODO:**
 - setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
-    - `cargo +1.75 build --release` (for Windows 7 support)
-    - `cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.17`
+    - `cargo +1.75 build --release` (1.75 for Windows 7 support)
+    - `cargo zigbuild --release --target x86_64-unknown-linux-musl`
+    - [cargo-dist](https://github.com/axodotdev/cargo-dist)? I don't particularly want to package .msi installers though...
 - better logic to sync the position when someone joins a party (other than having an existing user just seek backwards from their position by 5s (which will sync the new user)...)
 - Link to simulcast-mpv source-code (repository) in Hello message from the server?
     - log to stdout and log file...
