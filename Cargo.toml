@@ -11,9 +11,10 @@ license = "AGPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# TODO: Reenable. It increases build-time though.
-# [profile.release]
-# lto = true
+[profile.release]
+lto = true
+strip = true
+opt-level = "s"
 
 [dependencies]
 anyhow = "1"
