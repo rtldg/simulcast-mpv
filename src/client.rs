@@ -52,15 +52,19 @@ fn get_room_hash(mut code: String, relay_room: &str) -> String {
 
 async fn ws_thread(
 	relay_url: String,
-	relay_room: &str,
 	mpv: &Mpv,
 	receiver: &mut UnboundedReceiver<WsMessage>,
 	state: Arc<Mutex<SharedState>>,
 ) -> anyhow::Result<()> {
 	info!("ws_thread!");
 
-	while receiver.try_recv() != Err(tokio::sync::mpsc::error::TryRecvError::Empty) {
+	loop {
 		// nom nom nom. eat messages.
+		match receiver.try_recv() {
+			Ok(_) => (),
+			Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
+			Err(e) => Err(e)?,
+		}
 	}
 
 	let (mut ws, _) = tokio_tungstenite::connect_async(relay_url)
@@ -70,16 +74,11 @@ async fn ws_thread(
 	info!("connected to websocket");
 
 	{
-		let room_code = {
+		let room_hash = {
 			let state = state.lock().unwrap();
-			state.room_code.clone()
+			state.room_hash.clone()
 		};
-		let room = if room_code.is_empty() {
-			mpv.get_property_string("filename")?
-		} else {
-			room_code
-		};
-		let joinmsg = WsMessage::Join(get_room_hash(room, relay_room));
+		let joinmsg = WsMessage::Join(room_hash);
 		debug!("send msg = {joinmsg:?}");
 		ws.send(Message::Text(serde_json::to_string(&joinmsg).unwrap())).await?;
 	}
@@ -263,8 +262,12 @@ pub fn client(
 		}
 	});
 
-	let file: String = mpv_query.get_property("filename")?;
-	info!("file = '{file}'");
+	let file = if let Ok(filename) = mpv_query.get_property_string("filename") {
+		info!("file = '{filename}'");
+		filename
+	} else {
+		rand::random::<u64>().to_string()
+	};
 
 	let state = Arc::new(Mutex::new(SharedState {
 		party_count: 0,
@@ -280,18 +283,10 @@ pub fn client(
 		.enable_all()
 		.worker_threads(2)
 		.build()?;
-	let relay_room_clone = relay_room.to_owned();
 	let state_ws = state.clone();
 	rt.spawn(async move {
 		loop {
-			let err = ws_thread(
-				relay_url.to_string(),
-				&relay_room_clone,
-				&mpv_ws,
-				&mut receiver,
-				state_ws.clone(),
-			)
-			.await;
+			let err = ws_thread(relay_url.to_string(), &mpv_ws, &mut receiver, state_ws.clone()).await;
 			if let Err(err) = err {
 				error!("{:?}", err);
 			}
@@ -432,8 +427,12 @@ pub fn client(
 							if !state.room_code.is_empty() {
 								state.room_hash = get_room_hash(state.room_code.clone(), &relay_room);
 							} else {
-								state.room_hash =
-									get_room_hash(mpv_query.get_property_string("filename")?, &relay_room);
+								state.room_hash = get_room_hash(
+									mpv_query
+										.get_property_string("filename")
+										.unwrap_or_else(|_| rand::random::<u64>().to_string()),
+									&relay_room,
+								);
 							}
 							state.room_hash.clone()
 						};

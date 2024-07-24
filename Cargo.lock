@@ -1484,6 +1484,7 @@ dependencies = [
  "http",
  "log",
  "mpvipc",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",

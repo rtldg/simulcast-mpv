@@ -41,3 +41,5 @@ blake3 = "1.5"
 
 log = { version = "0.4", features = ["std"] }
 flexi_logger = { version = "0.28", features = ["async"] }
+
+rand = "0.8.5"
