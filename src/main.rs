@@ -97,17 +97,45 @@ fn input_reader(client_sock: String) -> anyhow::Result<()> {
 }
 
 fn install() -> anyhow::Result<()> {
-	let scripts_dir = directories::UserDirs::new().unwrap().home_dir().join(if cfg!(windows) {
-		"AppData\\Roaming\\mpv\\scripts\\"
-	} else {
-		".config/mpv/scripts/"
-	});
+	let current_exe = std::env::current_exe()?;
+
+	let mut mpv_dir = None;
+
+	if let Ok(var) = std::env::var("MPV_HOME") {
+		mpv_dir = Some(var.into());
+	}
+
+	if cfg!(windows) {
+		/*
+		let parent = current_exe.parent().unwrap().to_owned();
+		if parent.join("mpv.exe").exists() {
+			let portable_config = current_exe.parent().unwrap().join("portable_config");
+			if portable_config.exists() {
+				scripts_dir = Some(portable_config);
+			}
+		}
+		*/
+		let portable_config = current_exe.parent().unwrap().join("portable_config");
+		if portable_config.exists() {
+			mpv_dir = Some(portable_config);
+		}
+	}
+
+	let scripts_dir = mpv_dir
+		.unwrap_or_else(|| {
+			directories::UserDirs::new().unwrap().home_dir().join(if cfg!(windows) {
+				"AppData\\Roaming\\mpv"
+			} else {
+				".config/mpv"
+			})
+		})
+		.join("scripts");
 
 	println!("- Creating {}", scripts_dir.display());
 	std::fs::create_dir_all(&scripts_dir)?;
 
 	// TODO: Option to not overwrite if the file exists...
-	println!("- Writing {}", scripts_dir.join("simulcast-mpv.lua").display());
+	println!("- Writing  {}", scripts_dir.join("simulcast-mpv.lua").display());
 	std::fs::write(scripts_dir.join("simulcast-mpv.lua"), include_str!("simulcast-mpv.lua"))?;
 
 	let target_exe = scripts_dir.join(if cfg!(windows) {
@@ -115,9 +143,9 @@ fn install() -> anyhow::Result<()> {
 	} else {
 		"simulcast-mpv"
 	});
-	if target_exe != std::env::current_exe()? {
+	if target_exe != current_exe {
 		println!("- Copying current executable to scripts directory...");
-		let _ = std::fs::copy(std::env::current_exe()?, target_exe)?;
+		let _ = std::fs::copy(&current_exe, target_exe)?;
 	}
 
 	println!("Press ENTER to exit...");

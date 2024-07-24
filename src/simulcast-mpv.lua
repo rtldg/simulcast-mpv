@@ -8,6 +8,9 @@
 --                                   BE CAREFUL!!                                    --
 ---------------------------------------------------------------------------------------
 
+mp.msg = require("mp.msg")
+mp.utils = require("mp.utils")
+
 SIMULCAST_ENABLED = true
 SIMULCAST_CONNECTED = nil
 
@@ -86,7 +89,21 @@ local function setup_ipc_socket(dev)
 end
 
 local function start_executable(client_sock)
-	local executable = mp.command_native({"expand-path", "~~home/"}) .. "/scripts/simulcast-mpv"
+	local folder
+
+	if platform == "windows" then
+		local portable_config = mp.command_native({"expand-path", "~~exe_dir/"}).."/portable_config"
+		local info, err = mp.utils.file_info(portable_config)
+		if info ~= nil and info.is_dir then
+			folder = portable_config
+		end
+	end
+
+	if folder == nil then
+		folder = mp.command_native({"expand-path", "~~home/"})
+	end
+
+	local executable = folder .. "/scripts/simulcast-mpv"
 	if platform == "windows" then
 		executable = executable .. ".exe"
 	end
@@ -94,7 +111,14 @@ local function start_executable(client_sock)
 	return mp.command_native_async(
 		{"run", executable, "client", "--client-sock", client_sock},
 		function(success, result, error)
-			--mp.osd_message("simulcast success = "..tostring(success).." | result = "..tostring(result).." | error = "..tostring(error), 10)
+			if success then
+				local msg = "simulcast success ("..executable..") | socket = "..client_sock
+				mp.msg.info(msg)
+			else
+				local msg = "simulcast failed ("..executable..") | result = "..tostring(result).." | error = "..tostring(error)
+				mp.osd_message(msg, 20)
+				mp.msg.error(msg)
+			end
 		end
 	)
 end

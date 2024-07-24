@@ -30,7 +30,6 @@ The `simulcast-mpv` executable has 4 "modes":
 - Link to simulcast-mpv source-code (repository) in Hello message from the server?
     - log to stdout and log file...
 - Drop `mpvipc` dependency?
-- Better portable-install-config-directory handling...
 
 ## similar projects (for mpv)
 - Syncplay: [website](https://syncplay.pl/) / [github](https://github.com/Syncplay/syncplay)
