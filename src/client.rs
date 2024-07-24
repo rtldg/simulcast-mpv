@@ -166,7 +166,7 @@ fn spawn_input_reader(client_sock: String) -> anyhow::Result<()> {
 	{
 		const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 		let _ = std::process::Command::new(exe)
-			.args(&["input-reader", "--client-sock", &client_sock])
+			.args(["input-reader", "--client-sock", &client_sock])
 			.creation_flags(CREATE_NEW_CONSOLE)
 			.spawn()?
 			.wait()?;
@@ -354,11 +354,8 @@ pub fn client(
 								continue;
 							} else {
 								state.party_count = 0;
-								match data {
-									MpvDataType::String(s) => {
-										state.room_hash = get_room_hash(s, &relay_room);
-									}
-									_ => (),
+								if let MpvDataType::String(s) = data {
+									state.room_hash = get_room_hash(s, &relay_room);
 								}
 							}
 							state.room_hash.clone()
