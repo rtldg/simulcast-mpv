@@ -89,21 +89,7 @@ local function setup_ipc_socket(dev)
 end
 
 local function start_executable(client_sock)
-	local folder
-
-	if platform == "windows" then
-		local portable_config = mp.command_native({"expand-path", "~~exe_dir/"}).."/portable_config"
-		local info, err = mp.utils.file_info(portable_config)
-		if info ~= nil and info.is_dir then
-			folder = portable_config
-		end
-	end
-
-	if folder == nil then
-		folder = mp.command_native({"expand-path", "~~home/"})
-	end
-
-	local executable = folder .. "/scripts/simulcast-mpv"
+	local executable = mp.command_native({"expand-path", "~~home/"}) .. "/scripts/simulcast-mpv"
 	if platform == "windows" then
 		executable = executable .. ".exe"
 	end
