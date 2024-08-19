@@ -7,6 +7,7 @@ mod client;
 mod message;
 mod server;
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use log::info;
 use std::io::Read;
@@ -23,6 +24,9 @@ struct Cli {
 	/// -vvvv show trace
 	#[command(flatten)]
 	verbose: clap_verbosity_flag::Verbosity<clap_verbosity_flag::InfoLevel>,
+	/// Toggles whether to block and wait for you to press ENTER during install.
+	#[arg(long, default_value_t = false)]
+	noninteractive: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -66,8 +70,8 @@ fn main() -> anyhow::Result<()> {
 
 	let args = Cli::parse();
 
-	let res = if let Some(command) = args.command {
-		match command {
+	if let Some(command) = args.command {
+		let res = match command {
 			Commands::Relay {
 				bind_address,
 				bind_port,
@@ -78,12 +82,22 @@ fn main() -> anyhow::Result<()> {
 				client_sock,
 			} => client::client(args.verbose.log_level_filter(), relay_url, relay_room, client_sock),
 			Commands::InputReader { client_sock } => input_reader(client_sock),
-		}
+		};
+		info!("res = {res:?}");
+		res
 	} else {
-		install()
-	};
-	info!("{:?}", res);
-	res
+		let res = install();
+		if args.noninteractive {
+			res
+		} else {
+			if let Err(e) = res {
+				println!("\n{e:?}");
+			}
+			println!("\nPress ENTER to exit...");
+			let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+			Ok(()) // Slurp it so it doesn't double print...
+		}
+	}
 }
 
 fn input_reader(client_sock: String) -> anyhow::Result<()> {
@@ -132,11 +146,13 @@ fn install() -> anyhow::Result<()> {
 		.join("scripts");
 
 	println!("- Creating {}", scripts_dir.display());
-	std::fs::create_dir_all(&scripts_dir)?;
+	std::fs::create_dir_all(&scripts_dir).with_context(|| format!("Failed to create {}", scripts_dir.display()))?;
 
 	// TODO: Option to not overwrite if the file exists...
-	println!("- Writing  {}", scripts_dir.join("simulcast-mpv.lua").display());
-	std::fs::write(scripts_dir.join("simulcast-mpv.lua"), include_str!("simulcast-mpv.lua"))?;
+	let lua_file = scripts_dir.join("simulcast-mpv.lua");
+	println!("- Writing  {}", lua_file.display());
+	std::fs::write(&lua_file, include_str!("simulcast-mpv.lua"))
+		.with_context(|| format!("Failed to write {}", lua_file.display()))?;
 
 	let target_exe = scripts_dir.join(if cfg!(windows) {
 		"simulcast-mpv.exe"
@@ -144,12 +160,12 @@ fn install() -> anyhow::Result<()> {
 		"simulcast-mpv"
 	});
 	if target_exe != current_exe {
-		println!("- Copying current executable to scripts directory...");
-		let _ = std::fs::copy(&current_exe, target_exe)?;
+		println!("- Writing  {}...", target_exe.display());
+		let _ = std::fs::copy(&current_exe, &target_exe)
+			.with_context(|| format!("Failed to write {}", target_exe.display()))?;
 	}
 
-	println!("Press ENTER to exit...");
-	let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+	println!("\nDONE!");
 
 	Ok(())
 }
