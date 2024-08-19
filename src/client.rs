@@ -199,6 +199,7 @@ pub fn client(
 			.default(verbosity)
 			.module("mpvipc", log::LevelFilter::Error)
 			.module("rustls", log::LevelFilter::Warn)
+			.module("tokio_tungstenite", log::LevelFilter::Warn)
 			.module("tungstenite", log::LevelFilter::Warn)
 			.build(),
 	)
@@ -321,12 +322,13 @@ pub fn client(
 			Event::Unimplemented => {}
 			Event::PropertyChange { id: _, property } => match property {
 				Property::Pause(paused) => {
-					info!("pause called");
-
 					let Ok(time) = mpv_query.get_property("playback-time/full") else {
+						info!("pause called. paused={paused}, no time though");
 						continue;
 					};
 					let mut state = state.lock().unwrap();
+
+					info!("pause called. state={}, new={}", state.paused, paused);
 
 					if paused == state.paused {
 						continue;
