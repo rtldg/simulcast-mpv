@@ -45,8 +45,15 @@ struct SharedState {
 	room_hash: String,
 }
 
-fn get_room_hash(mut code: String, relay_room: &str) -> String {
-	code.push_str(relay_room);
+fn get_room_hash(code: &str, relay_room: &str) -> String {
+	let code = code
+		.chars()
+		.map(|c| match c {
+			'_' | '-' | '+' | '.' => ' ',
+			_ => c,
+		})
+		.collect::<String>()
+		+ relay_room;
 	blake3::hash(code.as_bytes()).to_hex().to_string()
 }
 
@@ -274,7 +281,7 @@ pub fn client(
 		paused: false,
 		time: 0.0,
 		room_code: String::new(),
-		room_hash: get_room_hash(file, &relay_room),
+		room_hash: get_room_hash(&file, &relay_room),
 	}));
 
 	let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
@@ -355,7 +362,7 @@ pub fn client(
 							} else {
 								state.party_count = 0;
 								if let MpvDataType::String(s) = data {
-									state.room_hash = get_room_hash(s, &relay_room);
+									state.room_hash = get_room_hash(&s, &relay_room);
 								}
 							}
 							state.room_hash.clone()
@@ -422,10 +429,10 @@ pub fn client(
 							let mut state = state.lock().unwrap();
 							state.room_code = data;
 							if !state.room_code.is_empty() {
-								state.room_hash = get_room_hash(state.room_code.clone(), &relay_room);
+								state.room_hash = get_room_hash(&state.room_code, &relay_room);
 							} else {
 								state.room_hash = get_room_hash(
-									mpv_query
+									&mpv_query
 										.get_property_string("filename")
 										.unwrap_or_else(|_| rand::random::<u64>().to_string()),
 									&relay_room,
