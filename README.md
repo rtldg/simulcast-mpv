@@ -40,6 +40,10 @@ The `simulcast-mpv` executable has 4 "modes":
     - Manual groupwatch project.
 - others? dunno...
 
+## similar projects (for not-mpv)
+- Jellyfin has some "SyncPlay" thing.
+- Plex (ew) has a "Watch Together" thing.
+
 ## Environment variables / .env
 `simulcast-mpv` allows environment variables and files to configure some of the settings.
 
