@@ -51,6 +51,8 @@ client
 - `SIMULCAST_RELAY_URL` / `--relay-url` (default: reads the server from [here](https://github.com/rtldg/simulcast-mpv/blob/master/docs/servers.txt))
 - `SIMULCAST_RELAY_ROOM` / `--relay-room` (default `abcd1234`)
 - `SIMULCAST_CLIENT_SOCK` / `--client-sock` (passed by mpv to the simulcast-mpv executable)
+
+relay server
 - `SIMULCAST_BIND_ADDRESS` / `--bind-address` (default `127.0.0.1`)
 - `SIMULCAST_BIND_PORT` / `--bind-port` (default `30777`)
 
