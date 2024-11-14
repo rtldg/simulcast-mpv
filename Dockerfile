@@ -22,4 +22,4 @@ WORKDIR /app
 COPY --from=builder /usr/src/app/simulcast-mpv /app/simulcast-mpv
 
 # Run the app
-CMD ./simulcast-mpv relay --bind-address 0.0.0.0 --bind-port 8080
+CMD ./simulcast-mpv relay

@@ -11,12 +11,13 @@ kill_timeout = '5s'
 [build]
 
 [env]
-  PORT = '8080'
+  SIMULCAST_BIND_ADDRESS = '0.0.0.0'
+  SIMULCAST_BIND_PORT = '8080'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
   processes = ['app']
