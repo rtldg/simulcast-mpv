@@ -5,4 +5,6 @@ services:
     restart: unless-stopped
     environment:
       - SIMULCAST_BIND_ADDRESS=0.0.0.0
-      #- SIMULCAST_BIND_PORT=8080
+    ports:
+      # Default SIMULCAST_BIND_PORT.
+      - "127.0.0.1:30777:30777"
