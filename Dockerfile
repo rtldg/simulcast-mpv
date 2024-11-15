@@ -1,6 +1,6 @@
 # stolen from https://github.com/fly-apps/hello-rust/blob/main/Dockerfile
 
-FROM rust:1-bookworm as builder
+FROM rust:1-bookworm AS builder
 
 WORKDIR /usr/src/app
 COPY . .
