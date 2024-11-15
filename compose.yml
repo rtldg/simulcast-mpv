@@ -1,0 +1,8 @@
+services:
+  simulcast-mpv-relay:
+    #user: 1000:1000
+    build: .
+    restart: unless-stopped
+    environment:
+      - SIMULCAST_BIND_ADDRESS=0.0.0.0
+      #- SIMULCAST_BIND_PORT=8080
