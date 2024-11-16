@@ -1,0 +1,47 @@
+name: Build everything
+
+# TODO: Build docker container?
+on:
+  push:
+    paths: ['**.rs', 'Cargo.toml', 'Cargo.lock', '.github/workflows/build-everything.yml']
+  pull_request:
+    paths: ['**.rs', 'Cargo.toml', 'Cargo.lock', '.github/workflows/build-everything.yml']
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_everything:
+    runs-on: windows-latest
+
+    steps:
+      - name: Prepare env
+        shell: bash
+        run: echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@v1.10.12
+      - name: Install the cargo bins we use...
+        shell: pwsh
+        run: |
+          cargo binstall -y cargo-zigbuild
+      - name: Install Linux toolchain
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+      - name: Build for Windows 7
+        run: |
+          cargo +1.75 build --release
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulcast-mpv-${{ github.head_ref || github.ref_name }}-${{ env.GITHUB_SHA_SHORT }}-windows
+          path: target/release/simulcast-mpv.exe
+      - name: Build for Linux
+        run: |
+          cargo zigbuild --release --target x86_64-unknown-linux-musl
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulcast-mpv-${{ github.head_ref || github.ref_name }}-${{ env.GITHUB_SHA_SHORT }}-linux
+          path: target/x86_64-unknown-linux-musl/release/simulcast-mpv
