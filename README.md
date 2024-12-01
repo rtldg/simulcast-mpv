@@ -22,6 +22,7 @@ The `simulcast-mpv` executable has 4 "modes":
     - A popup command prompt window for inputting custom room codes.
 
 ## **TODO:**
+- Log simulcast-mpv things to mpv console.
 - setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
     - `cargo +1.75 build --release` (1.75 for Windows 7 support)
     - `cargo zigbuild --release --target x86_64-unknown-linux-musl`
