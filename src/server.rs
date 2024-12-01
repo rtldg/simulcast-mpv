@@ -55,7 +55,7 @@ async fn handle_websocket(
 		let mut rooms = rooms.lock().unwrap();
 		let _ = remove_from_room(id, &current_room, rooms.deref_mut());
 	}
-	println!("finished with client {id} {addr}");
+	println!("finished with client {id} {addr} ({ret:?})");
 	ret
 }
 
@@ -93,12 +93,19 @@ async fn handle_websocket_inner(
 		}
 	});
 
+	// Using an `Instant` instead of `intervals_since_last_pong` because it's less prone to breaking in case the interval duration is ever changed for some reason.
+	let mut last_pong_time = std::time::Instant::now();
+
 	let mut interval = tokio::time::interval(Duration::from_secs(1));
 	loop {
 		tokio::select! {
 			_ = interval.tick() => {
 				let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
 				ch_s.send(WsMessage::Ping(now))?;
+
+				if last_pong_time.elapsed() > Duration::from_secs(10) {
+					anyhow::bail!("client {id} hasn't pong'd for 10s and probably lost connection."); // anyhow::bail!() will return btw...
+				}
 			}
 			msg = ws_r.next() => {
 				let Some(msg) = msg else { return Ok(()); };
@@ -207,6 +214,8 @@ async fn handle_websocket_inner(
 							.as_secs_f64();
 						ping = elapsed / 2.0;
 						// println!("  ping = {ping}s");
+
+						last_pong_time = std::time::Instant::now();
 
 						if current_room != "" {
 							let mut rooms = rooms.lock().unwrap();
