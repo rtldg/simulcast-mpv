@@ -43,6 +43,7 @@ The `simulcast-mpv` executable has 4 "modes":
 ## similar projects (for not-mpv)
 - Jellyfin has some "SyncPlay" thing.
 - Plex (ew) has a "Watch Together" thing.
+- [Metastream](https://github.com/samuelmaddock/metastream) does streaming & syncing on a webpage.
 
 ## Environment variables / .env
 `simulcast-mpv` allows environment variables and files to configure some of the settings.
