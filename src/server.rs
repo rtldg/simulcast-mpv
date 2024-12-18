@@ -111,7 +111,11 @@ async fn handle_websocket_inner(
 			}
 			msg = ws_r.next() => {
 				let Some(msg) = msg else { return Ok(()); };
-				let msg: WsMessage = serde_json::from_str(&msg?.into_text()?)?;
+				let msg = msg?.into_text()?;
+				let Ok(msg) = serde_json::from_str(&msg) else {
+					// println!("unknown message from client {id} msg = {msg}");
+					continue;
+				};
 				// println!("recv msg = {msg:?}");
 				match msg {
 					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
