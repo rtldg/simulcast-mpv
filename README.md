@@ -1,8 +1,12 @@
 
 # simulcast-mpv
-I was curious how easy it would be to sync two mpv players across the internet, even though it's' overengineering a solution to a not-very problem.
-If one person pauses, then pause for the other person. Add in some ping calculation between clients.
+A way to sync multiple [mpv players](https://mpv.io/) over the internet.
+- If someone pauses/resumes, then pause/resume for everyone.
+- If someone seeks forwards/backwards, then seek for everyone.
+- Add in some ping calculation between clients.
+
 That's basically what `simulcast-mpv` is.
+
 
 ## Usage
 **TL;DR:**
@@ -21,6 +25,7 @@ The `simulcast-mpv` executable has 4 "modes":
 - `simulcast-mpv input-reader`
     - A popup command prompt window for inputting custom room codes.
 
+
 ## **TODO:**
 - Log simulcast-mpv things to mpv console.
 - setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
@@ -32,6 +37,7 @@ The `simulcast-mpv` executable has 4 "modes":
 - Fix some logic bug that gets you trapped in a pause/unpause loop.
 - Drop `mpvipc` dependency?
 
+
 ## similar projects (for mpv)
 - Syncplay: [website](https://syncplay.pl/) / [github](https://github.com/Syncplay/syncplay)
     - More feature-complete than `simulcast-mpv`.
@@ -39,10 +45,12 @@ The `simulcast-mpv` executable has 4 "modes":
     - Manual groupwatch project.
 - others? dunno...
 
-## similar projects (for not-mpv)
+
+## similar projects (not for mpv)
 - Jellyfin has some "SyncPlay" thing.
 - Plex (ew) has a "Watch Together" thing.
 - [Metastream](https://github.com/samuelmaddock/metastream) does streaming & syncing on a webpage.
+
 
 ## Environment variables / .env
 `simulcast-mpv` allows environment variables and files to configure some of the settings.
@@ -61,6 +69,29 @@ Configuration files can be placed at
 - `%APPDATA%\mpv\scripts\simulcast-mpv.env` (Windows)
 - `~/.config/mpv/scripts/simulcast-mpv.env` (Unix)
 - `$PWD/simulcast-mpv.env` (current directory AKA where mpv is started from) (Windows + Unix)
+
+
+## Running the server (the intended way)
+```sh
+git clone https://github.com/rtldg/simulcast-mpv.git
+cd simulcast-mpv
+echo "SIMULCAST_REPO_URL=https://github.com/rtldg/simulcast-mpv" > .env
+docker compose up -d
+
+## then install caddy and reverse-proxy to 127.0.0.1:30777 like in this Caddyfile:
+##  mydomain.com {
+##    handle /simulcast-mpv {
+##      reverse_proxy 127.0.0.1:30777
+##    }
+##  }
+
+# To update:
+git pull # update latest repo changes
+docker compose build --no-cache simulcast-mpv-relay # rebuild or something lol... not sure if --no-cache is needed
+docker compose down
+docker compose up -d
+```
+
 
 ## Relay server privacy
 Relay server "rooms" are public to anyone who joins using the same "room ID".
