@@ -112,7 +112,7 @@ async fn ws_thread(
 			msg = ws.next() => {
 				let msg = msg.unwrap()?.into_text()?;
 				let Ok(msg) = serde_json::from_str(&msg) else {
-					info!("unknown message = '{msg}'");
+					debug!("unknown message = '{msg}'");
 					continue;
 				};
 				match msg {
@@ -335,12 +335,12 @@ pub fn client(
 			Event::PropertyChange { id: _, property } => match property {
 				Property::Pause(paused) => {
 					let Ok(time) = mpv_query.get_property("playback-time/full") else {
-						info!("pause called. paused={paused}, no time though");
+						debug!("pause called. paused={paused}, no time though");
 						continue;
 					};
 					let mut state = state.lock().unwrap();
 
-					info!("pause called. state={}, new={}", state.paused, paused);
+					debug!("pause called. state={}, new={}", state.paused, paused);
 
 					if paused == state.paused {
 						continue;
@@ -353,7 +353,7 @@ pub fn client(
 						continue;
 					}
 
-					info!("about to do pause stuff. state={}, new={}", state.paused, paused);
+					debug!("about to do pause stuff. state={}, new={}", state.paused, paused);
 
 					state.paused = true;
 					drop(state);
@@ -393,7 +393,7 @@ pub fn client(
 							continue;
 						}
 
-						info!("user-data/simulcast/fuckmpv = '{data}'");
+						debug!("user-data/simulcast/fuckmpv = '{data}'");
 						mpv_query.set_property("user-data/simulcast/fuckmpv", ".".to_string())?;
 
 						if data == "queue_resume" {
@@ -477,7 +477,7 @@ pub fn client(
 				let paused: bool = mpv_query.get_property("pause")?;
 				let mut state = state.lock().unwrap();
 
-				info!("Event::Seek. time = {}. expected = {}", time, state.time);
+				debug!("Event::Seek. time = {}. expected = {}", time, state.time);
 
 				if (time - state.time).abs() > 0.03 {
 					// seems like we seeked...
