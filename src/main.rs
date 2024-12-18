@@ -51,6 +51,9 @@ enum Commands {
 		/// Port to bind to
 		#[arg(long, env = "SIMULCAST_BIND_PORT", default_value_t = 30777)]
 		bind_port: u16,
+		/// Repository URL (for AGPL-3.0 reasons).
+		#[arg(long, env = "SIMULCAST_REPO_URL")]
+		repo_url: http::Uri,
 	},
 	InputReader {
 		/// mpv's socket path (input-ipc-server) that we connect to.
@@ -75,7 +78,8 @@ fn main() -> anyhow::Result<()> {
 			Commands::Relay {
 				bind_address,
 				bind_port,
-			} => server::server(args.verbose.log_level_filter(), bind_address, bind_port),
+				repo_url,
+			} => server::server(args.verbose.log_level_filter(), bind_address, bind_port, &repo_url),
 			Commands::Client {
 				relay_url,
 				relay_room,

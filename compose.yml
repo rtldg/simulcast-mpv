@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     environment:
       - SIMULCAST_BIND_ADDRESS=0.0.0.0
+      - SIMULCAST_REPO_URL=${SIMULCAST_REPO_URL}
     ports:
       # Default SIMULCAST_BIND_PORT.
       - "127.0.0.1:30777:30777"

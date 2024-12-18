@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum WsMessage {
+	// Used to query the server's version & repository.
+	// Client<->Server.
+	Info(String),
+
 	//
 	// Only client->server.
 	Join(String),

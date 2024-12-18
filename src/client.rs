@@ -80,6 +80,11 @@ async fn ws_thread(
 
 	info!("connected to websocket");
 
+	ws.send(Message::text(
+		serde_json::to_string(&WsMessage::Info(String::new())).unwrap(),
+	))
+	.await?;
+
 	{
 		let room_hash = {
 			let state = state.lock().unwrap();
@@ -105,12 +110,19 @@ async fn ws_thread(
 				).await?;
 			}
 			msg = ws.next() => {
-				let msg: WsMessage = serde_json::from_str(&msg.unwrap()?.into_text()?)?;
+				let msg = msg.unwrap()?.into_text()?;
+				let Ok(msg) = serde_json::from_str(&msg) else {
+					info!("unknown message = '{msg}'");
+					continue;
+				};
 				match msg {
 					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
 					_ => debug!("recv msg = {msg:?}")
 				}
 				match msg {
+					WsMessage::Info(s) => {
+						info!("server info: {s}");
+					},
 					WsMessage::Join(_) => { /* we shouldn't be receiving this */ },
 					WsMessage::Party(count) => {
 						let should_pause = {

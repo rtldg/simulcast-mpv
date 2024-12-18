@@ -28,6 +28,8 @@ struct Room {
 
 type Rooms = Arc<Mutex<HashMap<String, Room>>>;
 
+static REPO_URL: std::sync::OnceLock<http::Uri> = std::sync::OnceLock::new();
+
 fn remove_from_room(id: u64, current_room: &String, rooms: &mut HashMap<String, Room>) -> Member {
 	let members = &mut rooms.get_mut(current_room).unwrap().members;
 	let i = members.iter().position(|m| m.id == id).unwrap();
@@ -116,6 +118,11 @@ async fn handle_websocket_inner(
 					_ => println!("recv msg = {msg:?}")
 				}
 				match msg {
+					WsMessage::Info(_) => {
+						// Could be a more strongly-typed info message via json+serde but it doesn't really matter.
+						let s = format!("version {} repo {}", env!("CARGO_PKG_VERSION"), REPO_URL.get().unwrap());
+						let _ = ch_s.send(WsMessage::Info(s));
+					}
 					WsMessage::Join(ref new_room) => {
 						if new_room.as_str() == current_room {
 							continue;
@@ -246,7 +253,13 @@ async fn async_server(addr: std::net::SocketAddr) -> anyhow::Result<()> {
 	}
 }
 
-pub fn server(verbosity: log::LevelFilter, bind_address: std::net::IpAddr, bind_port: u16) -> anyhow::Result<()> {
+pub fn server(
+	verbosity: log::LevelFilter,
+	bind_address: std::net::IpAddr,
+	bind_port: u16,
+	repo_url: &http::Uri,
+) -> anyhow::Result<()> {
+	let _ = REPO_URL.get_or_init(|| repo_url.clone());
 	let addr = std::net::SocketAddr::new(bind_address, bind_port);
 	let rt = tokio::runtime::Runtime::new()?;
 	rt.block_on(async move { async_server(addr).await })

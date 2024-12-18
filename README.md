@@ -30,8 +30,6 @@ The `simulcast-mpv` executable has 4 "modes":
 - better logic to sync the position when someone joins a party (other than having an existing user just seek backwards from their position by 5s (which will sync the new user)...)
 - Things don't always pause correctly when a party starts. Seems related to mpv automatically resuming/playing media when mpv opens.
 - Fix some logic bug that gets you trapped in a pause/unpause loop.
-- Link to simulcast-mpv source-code (repository) in Hello message from the server?
-    - log to stdout and log file...
 - Drop `mpvipc` dependency?
 
 ## similar projects (for mpv)
@@ -57,6 +55,7 @@ client
 relay server
 - `SIMULCAST_BIND_ADDRESS` / `--bind-address` (default `127.0.0.1`)
 - `SIMULCAST_BIND_PORT` / `--bind-port` (default `30777`)
+- `SIMULCAST_REPO_URL` / `--repo-url` (for AGPL-3.0 reasons. Set this in your `.env` file if using 'docker compose')
 
 Configuration files can be placed at
 - `%APPDATA%\mpv\scripts\simulcast-mpv.env` (Windows)
