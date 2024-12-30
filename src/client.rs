@@ -92,7 +92,8 @@ async fn ws_thread(
 		};
 		let joinmsg = WsMessage::Join(room_hash);
 		debug!("send msg = {joinmsg:?}");
-		ws.send(Message::Text(serde_json::to_string(&joinmsg).unwrap())).await?;
+		ws.send(Message::Text(serde_json::to_string(&joinmsg).unwrap().into()))
+			.await?;
 	}
 
 	loop {
@@ -105,7 +106,7 @@ async fn ws_thread(
 				}
 				ws.send(
 					Message::Text(
-						serde_json::to_string(&msg).unwrap()
+						serde_json::to_string(&msg).unwrap().into()
 					)
 				).await?;
 			}

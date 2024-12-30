@@ -69,12 +69,12 @@ async fn handle_websocket_inner(
 ) -> anyhow::Result<()> {
 	let ws = tokio_tungstenite::accept_async_with_config(
 		stream,
-		Some(WebSocketConfig {
-			max_message_size: Some(512),
-			max_frame_size: Some(800),
-			accept_unmasked_frames: false,
-			..Default::default()
-		}),
+		Some(
+			WebSocketConfig::default()
+				.max_message_size(Some(512))
+				.max_frame_size(Some(800))
+				.accept_unmasked_frames(false),
+		),
 	)
 	.await?;
 
@@ -91,7 +91,9 @@ async fn handle_websocket_inner(
 				WsMessage::Ping(_) | WsMessage::Pong(_) => (),
 				_ => println!("send msg = {msg:?}"),
 			}
-			let _ = ws_s.send(Message::Text(serde_json::to_string(&msg).unwrap())).await;
+			let _ = ws_s
+				.send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+				.await;
 		}
 	});
 
