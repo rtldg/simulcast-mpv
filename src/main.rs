@@ -3,13 +3,17 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "client")]
 mod client;
 mod message;
+#[cfg(feature = "server")]
 mod server;
 
+#[cfg(feature = "client")]
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use log::info;
+#[cfg(feature = "client")]
 use std::io::Read;
 
 #[derive(Debug, Parser)]
@@ -25,12 +29,14 @@ struct Cli {
 	#[command(flatten)]
 	verbose: clap_verbosity_flag::Verbosity<clap_verbosity_flag::InfoLevel>,
 	/// Toggles whether to block and wait for you to press ENTER during install.
+	#[cfg(feature = "client")]
 	#[arg(long, default_value_t = false)]
 	noninteractive: bool,
 }
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+	#[cfg(feature = "client")]
 	Client {
 		/// Relay-server used by both users for synchronization.
 		/// If this is empty then it'll read the server from https://github.com/rtldg/simulcast-mpv/blob/master/docs/servers.txt
@@ -44,6 +50,7 @@ enum Commands {
 		#[arg(long, env = "SIMULCAST_CLIENT_SOCK")]
 		client_sock: String,
 	},
+	#[cfg(feature = "server")]
 	Relay {
 		/// Address to bind to
 		#[arg(long, env = "SIMULCAST_BIND_ADDRESS", default_value = "127.0.0.1")]
@@ -55,6 +62,7 @@ enum Commands {
 		#[arg(long, env = "SIMULCAST_REPO_URL")]
 		repo_url: http::Uri,
 	},
+	#[cfg(feature = "client")]
 	InputReader {
 		/// mpv's socket path (input-ipc-server) that we connect to.
 		#[arg(long, env = "SIMULCAST_CLIENT_SOCK")]
@@ -75,35 +83,46 @@ fn main() -> anyhow::Result<()> {
 
 	if let Some(command) = args.command {
 		let res = match command {
+			#[cfg(feature = "server")]
 			Commands::Relay {
 				bind_address,
 				bind_port,
 				repo_url,
 			} => server::server(args.verbose.log_level_filter(), bind_address, bind_port, &repo_url),
+			#[cfg(feature = "client")]
 			Commands::Client {
 				relay_url,
 				relay_room,
 				client_sock,
 			} => client::client(args.verbose.log_level_filter(), relay_url, relay_room, client_sock),
+			#[cfg(feature = "client")]
 			Commands::InputReader { client_sock } => input_reader(client_sock),
 		};
 		info!("res = {res:?}");
 		res
 	} else {
-		let res = install();
-		if args.noninteractive {
-			res
-		} else {
-			if let Err(e) = res {
-				println!("\n{e:?}");
+		#[cfg(feature = "client")]
+		{
+			let res = install();
+			if args.noninteractive {
+				res
+			} else {
+				if let Err(e) = res {
+					println!("\n{e:?}");
+				}
+				println!("\nPress ENTER to exit...");
+				let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+				Ok(()) // Slurp it so it doesn't double print...
 			}
-			println!("\nPress ENTER to exit...");
-			let _ = std::io::stdin().read(&mut [0u8]).unwrap();
-			Ok(()) // Slurp it so it doesn't double print...
+		}
+		#[cfg(not(feature = "client"))]
+		{
+			Ok(())
 		}
 	}
 }
 
+#[cfg(feature = "client")]
 fn input_reader(client_sock: String) -> anyhow::Result<()> {
 	let mpv = mpvipc::Mpv::connect(&client_sock)?;
 	println!("Please input a special room code (or nothing, to reset) then hit enter:");
@@ -114,6 +133,7 @@ fn input_reader(client_sock: String) -> anyhow::Result<()> {
 	Ok(())
 }
 
+#[cfg(feature = "client")]
 fn install() -> anyhow::Result<()> {
 	let current_exe = std::env::current_exe()?;
 

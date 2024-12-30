@@ -11,6 +11,23 @@ license = "AGPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = [
+	"client",
+	"server"
+]
+client = [
+	"dep:blake3",
+	"dep:directories",
+	"dep:flexi_logger",
+	"dep:mpvipc",
+	"dep:rand",
+	"dep:reqwest",
+]
+server = [
+	"dep:chrono",
+]
+
 [profile.release]
 lto = true
 strip = true
@@ -18,28 +35,28 @@ opt-level = "s"
 
 [dependencies]
 anyhow = "1"
-chrono = { version = "0.4", features = ["now", "alloc", "std", "winapi"], default-features = false}
+chrono = { version = "0.4", features = ["now", "alloc", "std", "winapi"], default-features = false, optional = true }
 clap = { version = "4.5", features = ["derive", "unicode", "env", "wrap_help"] }
 clap-verbosity-flag = "2.2"
-directories = "5"
+directories = { version = "5", optional = true }
 dotenvy = { version = "0.15" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 http = "1"
-reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls"]}
+reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls"], optional = true }
 
 #mpvipc = { path = "../mpvipc" }
-mpvipc = { git = "https://github.com/rtldg/mpvipc.git", rev = "dfd02e0d19" }
+mpvipc = { git = "https://github.com/rtldg/mpvipc.git", rev = "dfd02e0d19", optional = true }
 
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["rustls-tls-native-roots"] }
 
-blake3 = "1.5"
+blake3 = { version = "1.5", optional = true }
 
 log = { version = "0.4", features = ["std"] }
-flexi_logger = { version = "0.28", features = ["async"] }
+flexi_logger = { version = "0.28", features = ["async"], optional = true }
 
-rand = "0.8.5"
+rand = { version = "0.8.5", optional = true }
