@@ -263,7 +263,7 @@ pub fn client(
 
 	info!("relay_url = '{relay_url}'");
 
-	// I was originally testing with hardcoded socket names but a typo that put me back an hour...
+	// I was originally testing with hardcoded socket names but had a typo that put me back an hour...
 	// Commands, get/set_property will eat events in the queue so let's separate the sockets...
 	let mut mpv_events =
 		Mpv::connect(&client_sock).context(format!("failed to connect to mpv socket '{}'", client_sock))?;
@@ -271,7 +271,7 @@ pub fn client(
 	//
 	let mpv_ws = Mpv::connect(&client_sock)?;
 
-	info!("mpv objects setup...");
+	info!("mpv objects are setup...");
 
 	let heartbeat_sock = client_sock.clone();
 	let _ = std::thread::spawn(move || {

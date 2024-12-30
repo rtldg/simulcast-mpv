@@ -211,7 +211,7 @@ async fn handle_websocket_inner(
 						for member in &room.members {
 							// NOTE: We might need to send the seek to the same user that sent the seek.
 							// It can be a bit desynced if we don't...
-							//It depends on if we have a sleep in the Event::Seek though... BROCCOLI
+							// It depends on if we have a sleep in the Event::Seek though... BROCCOLI
 							if member.id != id {
 								let _ = member.sender.send(WsMessage::AbsoluteSeek(t));
 							}
