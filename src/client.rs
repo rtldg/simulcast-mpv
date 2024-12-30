@@ -225,23 +225,31 @@ pub fn client(
 	// TODO: include git revision...?
 	info!("simulcast-mpv version {}!", env!("CARGO_PKG_VERSION"));
 
+	let rt = tokio::runtime::Builder::new_multi_thread()
+		.enable_all()
+		.worker_threads(2)
+		.build()?;
+
 	let relay_url = if relay_url.is_none() {
 		// TODO: check list of urls to see if they're alive?
 		info!("querying server from https://rtldg.github.io/simulcast-mpv/servers.txt ...");
 		// github.io url used because it's cdn-backed and probably won't bother github too much if we fetch it all the time
-		reqwest::blocking::Client::new()
-			.get("https://rtldg.github.io/simulcast-mpv/servers.txt")
-			.header(
-				"user-agent",
-				format!(
-					"{}/{} ({})",
-					env!("CARGO_PKG_NAME"),
-					env!("CARGO_PKG_VERSION"),
-					env!("CARGO_PKG_REPOSITORY")
-				),
-			)
-			.send()?
-			.text()?
+		let resp = rt.block_on(async {
+			reqwest::Client::new()
+				.get("https://rtldg.github.io/simulcast-mpv/servers.txt")
+				.header(
+					"user-agent",
+					format!(
+						"{}/{} ({})",
+						env!("CARGO_PKG_NAME"),
+						env!("CARGO_PKG_VERSION"),
+						env!("CARGO_PKG_REPOSITORY")
+					),
+				)
+				.send()
+				.await
+		})?;
+		rt.block_on(async { resp.text().await })?
 			.lines()
 			.next()
 			.unwrap()
@@ -298,11 +306,6 @@ pub fn client(
 	}));
 
 	let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
-
-	let rt = tokio::runtime::Builder::new_multi_thread()
-		.enable_all()
-		.worker_threads(2)
-		.build()?;
 	let state_ws = state.clone();
 	rt.spawn(async move {
 		loop {
