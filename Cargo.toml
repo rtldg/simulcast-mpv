@@ -20,7 +20,7 @@ client = [
 	"dep:blake3",
 	"dep:directories",
 	"dep:flexi_logger",
-	"dep:mpvipc",
+	"dep:interprocess",
 	"dep:rand",
 	"dep:reqwest",
 ]
@@ -47,8 +47,7 @@ serde_json = "1"
 http = "1"
 reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls"], optional = true }
 
-#mpvipc = { path = "../mpvipc", optional = true }
-mpvipc = { git = "https://github.com/rtldg/mpvipc.git", rev = "dfd02e0d19", optional = true }
+interprocess = { version = "2", optional = true }
 
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }

@@ -6,6 +6,8 @@
 #[cfg(feature = "client")]
 mod client;
 mod message;
+#[cfg(feature = "client")]
+mod mpvipc;
 #[cfg(feature = "server")]
 mod server;
 
@@ -124,12 +126,12 @@ fn main() -> anyhow::Result<()> {
 
 #[cfg(feature = "client")]
 fn input_reader(client_sock: String) -> anyhow::Result<()> {
-	let mpv = mpvipc::Mpv::connect(&client_sock)?;
+	let mut mpv = mpvipc::Mpv::connect(&client_sock)?;
 	println!("Please input a special room code (or nothing, to reset) then hit enter:");
 	// std::io::stdout().flush().unwrap();
 	let mut code = String::new();
 	let _ = std::io::stdin().read_line(&mut code).unwrap();
-	let _ = mpv.set_property("user-data/simulcast/input_reader", code.trim().to_string());
+	let _ = mpv.set_property("user-data/simulcast/input_reader", &serde_json::json!(code.trim()));
 	Ok(())
 }
 

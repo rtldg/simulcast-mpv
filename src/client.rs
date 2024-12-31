@@ -20,7 +20,7 @@ use anyhow::Context;
 use log::debug;
 use log::error;
 use log::info;
-use mpvipc::MpvDataType;
+use serde_json::json;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::sync::Arc;
@@ -30,8 +30,8 @@ use std::time::Duration;
 use futures::SinkExt;
 use futures::StreamExt;
 
+use crate::mpvipc::Mpv;
 use anyhow::anyhow;
-use mpvipc::{Event, Mpv, MpvCommand, Property};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -59,7 +59,7 @@ fn get_room_hash(code: &str, relay_room: &str) -> String {
 
 async fn ws_thread(
 	relay_url: String,
-	mpv: &Mpv,
+	mpv: &mut Mpv,
 	receiver: &mut UnboundedReceiver<WsMessage>,
 	state: Arc<Mutex<SharedState>>,
 ) -> anyhow::Result<()> {
@@ -139,14 +139,10 @@ async fn ws_thread(
 
 						if should_pause {
 							// these can hit too early and cause `Err(MpvError: property unavailable)`?
-							let _ = mpv.set_property("pause", true);
-							let _ = mpv.set_property("speed", 1.0); // useful for me
+							let _ = mpv.set_property("pause", &json!(true));
+							let _ = mpv.set_property("speed", &json!(1.0)); // useful for me
 
-							let _ = mpv.run_command(MpvCommand::ShowText {
-								text: format!("party count: {count}"),
-								duration_ms: Some(2000),
-								level: None,
-							});
+							let _ = mpv.show_text(&format!("party count: {count}"), Some(2000), None);
 						}
 					},
 					WsMessage::Resume => {
@@ -154,7 +150,7 @@ async fn ws_thread(
 							let mut state = state.lock().unwrap();
 							state.paused = false;
 						}
-						mpv.set_property("pause", false)?;
+						mpv.set_property("pause", &json!(false))?;
 					},
 					WsMessage::AbsoluteSeek(time) => {
 						{
@@ -162,13 +158,10 @@ async fn ws_thread(
 							state.paused = true;
 							state.time = time;
 						}
-						mpv.set_property("pause", true)?;
+						mpv.set_property("pause", &json!(true))?;
 						// mpv.seek(time, mpvipc::SeekOptions::Absolute)?; // Not exact seek?
 						// mpv.set_property("playback-time", time)?; // Doesn't show OSD
-						mpv.run_command_raw2(&["osd-auto", "seek"], &[
-							&time.to_string(),
-							"absolute+exact"
-						])?;
+						let _ = mpv.raw_command(&json!(["osd-auto", "seek", time.to_string(), "absolute+exact"]))?;
 					},
 					WsMessage::Ping(s) => {
 						ws.send(Message::text(serde_json::to_string(&WsMessage::Pong(s)).unwrap())).await?;
@@ -276,24 +269,30 @@ pub fn client(
 	// Commands, get/set_property will eat events in the queue so let's separate the sockets...
 	let mut mpv_events =
 		Mpv::connect(&client_sock).context(format!("failed to connect to mpv socket '{}'", client_sock))?;
-	let mpv_query = Mpv::connect(&client_sock)?;
+	let mut mpv_query = Mpv::connect(&client_sock)?;
+	mpv_query.events(false);
 	//
-	let mpv_ws = Mpv::connect(&client_sock)?;
+	let mut mpv_ws = Mpv::connect(&client_sock)?;
+	mpv_ws.events(false);
 
 	info!("mpv objects are setup...");
 
 	let heartbeat_sock = client_sock.clone();
 	let _ = std::thread::spawn(move || {
-		let mpv_heartbeat = Mpv::connect(&heartbeat_sock).unwrap();
+		let mut mpv_heartbeat = Mpv::connect(&heartbeat_sock).unwrap();
+		mpv_heartbeat.events(false);
 		for i in 1..usize::MAX {
 			std::thread::sleep(Duration::from_secs_f64(0.1));
-			mpv_heartbeat.set_property("user-data/simulcast/heartbeat", i).unwrap();
+			mpv_heartbeat
+				.set_property("user-data/simulcast/heartbeat", &json!(i))
+				.unwrap();
 		}
 	});
 
-	let file = if let Ok(filename) = mpv_query.get_property_string("filename") {
+	let file = if let Ok(filename) = mpv_query.get_property("filename") {
+		let filename = filename.as_str().unwrap();
 		info!("file = '{filename}'");
-		filename
+		filename.to_string()
 	} else {
 		rand::random::<u64>().to_string()
 	};
@@ -310,7 +309,7 @@ pub fn client(
 	let state_ws = state.clone();
 	rt.spawn(async move {
 		loop {
-			let err = ws_thread(relay_url.to_string(), &mpv_ws, &mut receiver, state_ws.clone()).await;
+			let err = ws_thread(relay_url.to_string(), &mut mpv_ws, &mut receiver, state_ws.clone()).await;
 			if let Err(err) = err {
 				error!("{:?}", err);
 			}
@@ -323,7 +322,7 @@ pub fn client(
 
 	mpv_events.observe_property(1, "filename")?;
 	mpv_events.observe_property(2, "pause")?;
-	mpv_events.observe_property(3, "playback-time")?;
+	//mpv_events.observe_property(3, "playback-time")?;
 	mpv_events.observe_property(4, "user-data/simulcast/fuckmpv")?;
 	mpv_events.observe_property(5, "user-data/simulcast/input_reader")?;
 
@@ -332,46 +331,49 @@ pub fn client(
 	let (mut A_spam_last, mut A_spam_count, mut A_spam_cooldown) =
 		(std::time::SystemTime::now(), 0, std::time::SystemTime::UNIX_EPOCH);
 
-	loop {
-		match mpv_events.event_listen()? {
-			Event::Shutdown => return Ok(()),
-			Event::Unimplemented => {}
-			Event::PropertyChange { id: _, property } => match property {
-				Property::Pause(paused) => {
-					let Ok(time) = mpv_query.get_property("playback-time/full") else {
-						debug!("pause called. paused={paused}, no time though");
-						continue;
-					};
-					let mut state = state.lock().unwrap();
+	while let Ok(value) = mpv_events.listen_for_event() {
+		//debug!("{}", value);
+		match value["event"].as_str().unwrap() {
+			"shutdown" => return Ok(()),
+			"property-change" => {
+				match value["name"].as_str().unwrap() {
+					"pause" => {
+						let paused = value["data"].as_bool().unwrap();
+						let Ok(time) = mpv_query.get_property("playback-time/full") else {
+							debug!("pause called. paused={paused}, no time though");
+							continue;
+						};
+						let time = time.as_f64().unwrap();
+						let mut state = state.lock().unwrap();
 
-					debug!("pause called. state={}, new={}", state.paused, paused);
+						debug!("pause called. state={}, new={}", state.paused, paused);
 
-					if paused == state.paused {
-						continue;
+						if paused == state.paused {
+							continue;
+						}
+
+						state.time = time;
+
+						if state.party_count < 2 {
+							state.paused = paused;
+							continue;
+						}
+
+						debug!("about to do pause stuff. state={}, new={}", state.paused, paused);
+
+						state.paused = true;
+						drop(state);
+
+						if paused {
+							let _ = sender.send(WsMessage::AbsoluteSeek(time));
+						} else {
+							// if we are here then we probably unpaused with the onscreen-display
+							mpv_query.set_property("pause", &json!(true))?;
+							let _ = sender.send(WsMessage::Resume);
+						}
 					}
-
-					state.time = time;
-
-					if state.party_count < 2 {
-						state.paused = paused;
-						continue;
-					}
-
-					debug!("about to do pause stuff. state={}, new={}", state.paused, paused);
-
-					state.paused = true;
-					drop(state);
-
-					if paused {
-						let _ = sender.send(WsMessage::AbsoluteSeek(time));
-					} else {
-						// if we are here then we probably unpaused with the onscreen-display
-						mpv_query.set_property("pause", true)?;
-						let _ = sender.send(WsMessage::Resume);
-					}
-				}
-				Property::Unknown { name, data } => match name.as_str() {
 					"filename" => {
+						let filename = value["data"].as_str().unwrap();
 						let room_hash = {
 							let mut state = state.lock().unwrap();
 							if !state.room_code.is_empty() {
@@ -379,8 +381,8 @@ pub fn client(
 								continue;
 							} else {
 								state.party_count = 0;
-								if let MpvDataType::String(s) = data {
-									state.room_hash = get_room_hash(&s, &relay_room);
+								if !filename.is_empty() {
+									state.room_hash = get_room_hash(filename, &relay_room);
 								}
 							}
 							state.room_hash.clone()
@@ -388,7 +390,7 @@ pub fn client(
 						let _ = sender.send(WsMessage::Join(room_hash));
 					}
 					"user-data/simulcast/fuckmpv" => {
-						let MpvDataType::String(data) = data else {
+						let Some(data) = value["data"].as_str() else {
 							// tf?
 							continue;
 						};
@@ -398,11 +400,11 @@ pub fn client(
 						}
 
 						debug!("user-data/simulcast/fuckmpv = '{data}'");
-						mpv_query.set_property("user-data/simulcast/fuckmpv", ".".to_string())?;
+						mpv_query.set_property("user-data/simulcast/fuckmpv", &json!("."))?;
 
 						if data == "queue_resume" {
 							if state.lock().unwrap().party_count < 2 {
-								mpv_query.set_property("pause", false)?;
+								mpv_query.set_property("pause", &json!(false))?;
 								continue;
 							}
 
@@ -430,18 +432,20 @@ pub fn client(
 								let state = state.lock().unwrap();
 								(state.party_count, state.room_code.clone(), state.room_hash.clone())
 							};
-							let _ = mpv_query.run_command(MpvCommand::ShowText {
-								text: format!("SIMULCAST\nparty count = {party_count}\ncustom room code = '{room_code}'\nroom id/hash = {room_hash}"),
-								duration_ms: Some(7000),
-								level: None,
-							});
+
+							let _ = mpv_query.show_text(
+								&format!("SIMULCAST\nparty count = {party_count}\ncustom room code = '{room_code}'\nroom id/hash = {room_hash}"),
+								Some(7000),
+								None
+							);
 						}
 					}
 					"user-data/simulcast/input_reader" => {
-						let MpvDataType::String(data) = data else {
+						let Some(data) = value["data"].as_str() else {
 							// tf?
 							continue;
 						};
+						let data = data.to_string();
 
 						let room_hash = {
 							let mut state = state.lock().unwrap();
@@ -451,7 +455,8 @@ pub fn client(
 							} else {
 								state.room_hash = get_room_hash(
 									&mpv_query
-										.get_property_string("filename")
+										.get_property("filename")
+										.map(|v| v.as_str().unwrap_or_default().to_string())
 										.unwrap_or_else(|_| rand::random::<u64>().to_string()),
 									&relay_room,
 								);
@@ -460,25 +465,24 @@ pub fn client(
 						};
 						let _ = sender.send(WsMessage::Join(room_hash));
 					}
-					_ => {}
-				},
-				Property::PlaybackTime(_t) => {
-					// tick += 1;
-					// mpv.run_command(MpvCommand::ShowText {
-					// 	text: tick.to_string(),
-					// 	duration_ms: Some(100),
-					// 	level: None,
-					// })?;
+					"playback-time" => {
+						// tick += 1;
+						// mpv.run_command(MpvCommand::ShowText {
+						// 	text: tick.to_string(),
+						// 	duration_ms: Some(100),
+						// 	level: None,
+						// })?;
+					}
+					_ => (),
 				}
-				_ => {}
-			},
-			Event::Seek => {
+			}
+			"seek" => {
 				// This is dumb but necessary. We need *some* wait here otherwise it's desynced.
 				// Related place to edit in server.rs. Ctrl+f "BROCCOLI".
 				std::thread::sleep(Duration::from_millis(100));
 
-				let time: f64 = mpv_query.get_property("playback-time/full")?;
-				let paused: bool = mpv_query.get_property("pause")?;
+				let time = mpv_query.get_property("playback-time/full")?.as_f64().unwrap();
+				let paused = mpv_query.get_property("pause")?.as_bool().unwrap();
 				let mut state = state.lock().unwrap();
 
 				debug!("Event::Seek. time = {}. expected = {}", time, state.time);
@@ -496,7 +500,7 @@ pub fn client(
 					drop(state);
 
 					if party_count > 1 && !paused {
-						mpv_query.set_property("pause", true)?;
+						mpv_query.set_property("pause", &json!(true))?;
 					}
 
 					if party_count > 1 {
@@ -504,7 +508,9 @@ pub fn client(
 					}
 				}
 			}
-			_ => {}
+			_ => (),
 		}
 	}
+
+	Ok(())
 }
