@@ -234,7 +234,9 @@ pub fn client(
 		.worker_threads(2)
 		.build()?;
 
-	let relay_url = if relay_url.is_none() {
+	let relay_url = if let Some(relay_url) = relay_url {
+		relay_url
+	} else {
 		// TODO: check list of urls to see if they're alive?
 		info!("querying server from https://rtldg.github.io/simulcast-mpv/servers.txt ...");
 		// github.io url used because it's cdn-backed and probably won't bother github too much if we fetch it all the time
@@ -259,8 +261,6 @@ pub fn client(
 			.unwrap()
 			.trim()
 			.parse()?
-	} else {
-		relay_url.unwrap()
 	};
 
 	// TODO: Throw error messages up on mpv's screen too...
