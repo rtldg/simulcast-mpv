@@ -28,14 +28,13 @@ The `simulcast-mpv` executable has 4 "modes":
 
 ## **TODO:**
 - Log simulcast-mpv things to mpv console.
-- setup github actions to compile binaries x86_64 Windows, x86_64 Linux, 64-bit ARM Linux.
+- setup github actions to compile binaries for 64-bit ARM Linux (and also publish binaries to a release tag...).
     - `cargo +1.75 build --release` (1.75 for Windows 7 support)
     - `cargo zigbuild --release --target x86_64-unknown-linux-musl`
     - [cargo-dist](https://github.com/axodotdev/cargo-dist)? I don't particularly want to package .msi installers though...
 - better logic to sync the position when someone joins a party (other than having an existing user just seek backwards from their position by 5s (which will sync the new user)...)
 - Things don't always pause correctly when a party starts. Seems related to mpv automatically resuming/playing media when mpv opens.
 - Fix some logic bug that gets you trapped in a pause/unpause loop.
-- Drop `mpvipc` dependency?
 
 
 ## similar projects (for mpv)
