@@ -96,8 +96,17 @@ async fn ws_thread(
 			.await?;
 	}
 
+	// Using an `Instant` instead of `intervals_since_last_ping` because it's less prone to breaking in case the interval duration is ever changed for some reason.
+	let mut last_ping_time = std::time::Instant::now();
+
+	let mut interval = tokio::time::interval(Duration::from_secs(1));
 	loop {
 		tokio::select! {
+			_ = interval.tick() => {
+				if last_ping_time.elapsed() > Duration::from_secs(10) {
+					anyhow::bail!("server hasn't pinged for 10s and we probably lost connection."); // anyhow::bail!() will return btw...
+				}
+			}
 			msg = receiver.recv() => {
 				let msg = msg.unwrap();
 				match msg {
@@ -164,6 +173,7 @@ async fn ws_thread(
 						let _ = mpv.raw_command(&json!(["osd-auto", "seek", time.to_string(), "absolute+exact"]))?;
 					},
 					WsMessage::Ping(s) => {
+						last_ping_time = std::time::Instant::now();
 						ws.send(Message::text(serde_json::to_string(&WsMessage::Pong(s)).unwrap())).await?;
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
@@ -317,6 +327,7 @@ pub fn client(
 				let mut state = state_ws.lock().unwrap();
 				state.party_count = 0;
 			}
+			tokio::time::sleep(Duration::from_secs_f64(3.1415926535897932384626433)).await;
 		}
 	});
 
