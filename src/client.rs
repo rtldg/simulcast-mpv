@@ -103,7 +103,10 @@ async fn ws_thread(
 				}
 			}
 			msg = receiver.recv() => {
-				let msg = msg.unwrap();
+				let Some(msg) = msg else {
+					// Receiver has closed and the program is about to exit....
+					return Ok(());
+				};
 				match msg {
 					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
 					_ => debug!("send msg = {msg:?}")
@@ -217,6 +220,8 @@ pub fn client(
 	.start()?;
 	// simple_logging::log_to_file("out.log", verbosity)?;
 
+	log_panics::init();
+
 	// TODO: include git revision...?
 	info!("simulcast-mpv version {}!", env!("CARGO_PKG_VERSION"));
 
@@ -313,6 +318,9 @@ pub fn client(
 			let err = ws_thread(relay_url.to_string(), &mut mpv_ws, &mut receiver, state_ws.clone()).await;
 			if let Err(err) = err {
 				error!("{:?}", err);
+			} else {
+				// Sender/receiver closed and ws_thread returned because the program is about to exit.
+				return;
 			}
 			{
 				let mut state = state_ws.lock().unwrap();
