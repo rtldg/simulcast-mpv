@@ -26,3 +26,16 @@ pub enum WsMessage {
 	//
 	Pong(String),
 }
+
+impl WsMessage {
+	/// The `Message::Text` type stores a `Bytes` internally which clones cheaply so let's just prepare that early so we don't have to allocate as much 😇
+	pub fn to_websocket_msg(&self) -> (tokio_tungstenite::tungstenite::protocol::Message, bool) {
+		(
+			tokio_tungstenite::tungstenite::protocol::Message::Text(serde_json::to_string(self).unwrap().into()),
+			match self {
+				WsMessage::Ping(_) | WsMessage::Pong(_) => true,
+				_ => false,
+			},
+		)
+	}
+}

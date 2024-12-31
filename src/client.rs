@@ -33,7 +33,6 @@ use futures::StreamExt;
 use crate::mpvipc::Mpv;
 use anyhow::anyhow;
 use tokio::sync::mpsc::UnboundedReceiver;
-use tokio_tungstenite::tungstenite::Message;
 
 use crate::message::WsMessage;
 
@@ -80,10 +79,7 @@ async fn ws_thread(
 
 	info!("connected to websocket");
 
-	ws.send(Message::text(
-		serde_json::to_string(&WsMessage::Info(String::new())).unwrap(),
-	))
-	.await?;
+	ws.send(WsMessage::Info(String::new()).to_websocket_msg().0).await?;
 
 	{
 		let room_hash = {
@@ -92,8 +88,7 @@ async fn ws_thread(
 		};
 		let joinmsg = WsMessage::Join(room_hash);
 		debug!("send msg = {joinmsg:?}");
-		ws.send(Message::Text(serde_json::to_string(&joinmsg).unwrap().into()))
-			.await?;
+		ws.send(joinmsg.to_websocket_msg().0).await?;
 	}
 
 	// Using an `Instant` instead of `intervals_since_last_ping` because it's less prone to breaking in case the interval duration is ever changed for some reason.
@@ -113,11 +108,7 @@ async fn ws_thread(
 					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
 					_ => debug!("send msg = {msg:?}")
 				}
-				ws.send(
-					Message::Text(
-						serde_json::to_string(&msg).unwrap().into()
-					)
-				).await?;
+				ws.send(msg.to_websocket_msg().0).await?;
 			}
 			msg = ws.next() => {
 				let msg = msg.unwrap()?.into_text()?;
@@ -174,7 +165,7 @@ async fn ws_thread(
 					},
 					WsMessage::Ping(s) => {
 						last_ping_time = std::time::Instant::now();
-						ws.send(Message::text(serde_json::to_string(&WsMessage::Pong(s)).unwrap())).await?;
+						ws.send(WsMessage::Pong(s).to_websocket_msg().0).await?;
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
 				}
