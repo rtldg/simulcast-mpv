@@ -3,6 +3,7 @@ services:
     #user: 1000:1000
     build: .
     restart: unless-stopped
+    stop_grace_period: 2s
     environment:
       - SIMULCAST_BIND_ADDRESS=0.0.0.0
       - SIMULCAST_REPO_URL=${SIMULCAST_REPO_URL}
