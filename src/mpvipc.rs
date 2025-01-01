@@ -13,8 +13,7 @@ pub struct Mpv {
 	reader: BufReader<RecvHalf>,
 	writer: SendHalf,
 
-	event_queue_enabled: bool,
-	event_queue: VecDeque<Value>,
+	event_queue: Option<VecDeque<Value>>,
 }
 
 impl Mpv {
@@ -29,14 +28,16 @@ impl Mpv {
 			reader: BufReader::new(r),
 			writer: s,
 
-			event_queue_enabled: true,
-			event_queue: VecDeque::new(),
+			event_queue: Some(VecDeque::new()),
 		})
 	}
 
 	pub fn events(&mut self, enabled: bool) {
-		self.event_queue_enabled = enabled;
-		self.event_queue.clear();
+		if enabled {
+			let _ = self.event_queue.get_or_insert_with(|| VecDeque::new());
+		} else {
+			self.event_queue = None;
+		}
 	}
 
 	/// Trims a trailing new-line
@@ -67,8 +68,8 @@ impl Mpv {
 			let v = self.read_value()?;
 			//log::debug!("got {}", v);
 			if v.get("event").is_some() {
-				if self.event_queue_enabled {
-					self.event_queue.push_back(v);
+				if let Some(queue) = self.event_queue.as_mut() {
+					queue.push_back(v);
 				}
 			} else {
 				return Ok(v);
@@ -92,8 +93,10 @@ impl Mpv {
 	}
 
 	pub fn listen_for_event(&mut self) -> anyhow::Result<Value> {
-		if let Some(v) = self.event_queue.pop_front() {
-			return Ok(v);
+		if let Some(queue) = self.event_queue.as_mut() {
+			if let Some(v) = queue.pop_front() {
+				return Ok(v);
+			}
 		}
 
 		loop {
