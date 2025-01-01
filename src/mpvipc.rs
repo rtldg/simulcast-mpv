@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: WTFPL
-// Copyright 2024 rtldg <rtldg@protonmail.com>
+// Copyright 2024-2025 rtldg <rtldg@protonmail.com>
 
 use anyhow::anyhow;
 use interprocess::local_socket::{prelude::*, GenericFilePath, RecvHalf, SendHalf, Stream};
@@ -18,7 +18,7 @@ pub struct Mpv {
 }
 
 impl Mpv {
-	/// On Windows: `pipe` should be a string with "\" and such. We prefix it with r"\\.\pipe\"
+	/// On Windows: `pipe` should be a string similar to r"\\.\pipe\mysocketnamehere"
 	/// On Linux: `pipe` should be a local file path for a unix-socket such as "/tmp/mpv.sock"
 	pub fn connect(pipe: &str) -> anyhow::Result<Mpv> {
 		let name = pipe.to_fs_name::<GenericFilePath>()?;
@@ -43,11 +43,7 @@ impl Mpv {
 	pub fn read_line(&mut self) -> anyhow::Result<String> {
 		let mut buffer = String::with_capacity(128);
 		let _ = self.reader.read_line(&mut buffer)?;
-		if let Some(c) = buffer.chars().last() {
-			if c == '\n' {
-				buffer.truncate(buffer.len() - 1);
-			}
-		}
+		buffer.truncate(buffer.trim_end().len());
 		//log::debug!("{}", buffer);
 		Ok(buffer)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright 2023-2024 rtldg <rtldg@protonmail.com>
+// Copyright 2023-2025 rtldg <rtldg@protonmail.com>
 
 #![forbid(unsafe_code)]
 
@@ -98,7 +98,7 @@ fn main() -> anyhow::Result<()> {
 				client_sock,
 			} => client::client(args.verbose.log_level_filter(), relay_url, relay_room, client_sock),
 			#[cfg(feature = "client")]
-			Commands::InputReader { client_sock } => input_reader(client_sock),
+			Commands::InputReader { client_sock } => input_reader(&client_sock),
 		};
 		info!("res = {res:?}");
 		res
@@ -125,8 +125,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 #[cfg(feature = "client")]
-fn input_reader(client_sock: String) -> anyhow::Result<()> {
-	let mut mpv = mpvipc::Mpv::connect(&client_sock)?;
+fn input_reader(client_sock: &str) -> anyhow::Result<()> {
+	let mut mpv = mpvipc::Mpv::connect(client_sock)?;
 	println!("Please input a special room code (or nothing, to reset) then hit enter:");
 	// std::io::stdout().flush().unwrap();
 	let mut code = String::new();

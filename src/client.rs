@@ -1,31 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright 2023-2024 rtldg <rtldg@protonmail.com>
-
-// https://github.com/snapview/tungstenite-rs
+// Copyright 2023-2025 rtldg <rtldg@protonmail.com>
 
 // https://crates.io/crates/shadow-rs
 //    A build-time information stored in your rust project
 
 // https://mpv.io/manual/master/
 // https://github.dev/mpv-player/mpv
-// https://docs.rs/mpvipc/
-
-// cargo run --release -- client --client-sock mpvsock42
-
-// cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.17
-// cargo +1.75 build --release
-// rustup override set 1.75 # last version before win7 support died
 
 use anyhow::Context;
 use log::debug;
 use log::error;
 use log::info;
 use serde_json::json;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
 use futures::SinkExt;
 use futures::StreamExt;
@@ -104,7 +97,13 @@ async fn ws_thread(
 			}
 			msg = receiver.recv() => {
 				let Some(msg) = msg else {
-					// Receiver has closed and the program is about to exit....
+					// Sender has closed and the program is about to exit....
+					let _ = ws.close(
+						Some(CloseFrame {
+							code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
+							reason: "".into(),
+						})
+					).await; // could be canceled if the Runtime is dropped fast
 					return Ok(());
 				};
 				match msg {
@@ -143,7 +142,7 @@ async fn ws_thread(
 						if should_pause {
 							// these can hit too early and cause `Err(MpvError: property unavailable)`?
 							let _ = mpv.set_property("pause", &json!(true));
-							let _ = mpv.set_property("speed", &json!(1.0)); // useful for me
+							let _ = mpv.set_property("speed", &json!(1.0)); // useful for me (since I have my default mpv speed at 1.5x)
 
 							let _ = mpv.show_text(&format!("party count: {count}"), Some(2000), None);
 						}
@@ -162,8 +161,7 @@ async fn ws_thread(
 							state.time = time;
 						}
 						mpv.set_property("pause", &json!(true))?;
-						// mpv.seek(time, mpvipc::SeekOptions::Absolute)?; // Not exact seek?
-						// mpv.set_property("playback-time", time)?; // Doesn't show OSD
+						// "osd-auto" is a prefix to make it show the onscreen-display seek bar just like seek binds do
 						let _ = mpv.raw_command(&json!(["osd-auto", "seek", time.to_string(), "absolute+exact"]))?;
 					},
 					WsMessage::Ping(s) => {
@@ -203,11 +201,27 @@ pub fn client(
 	relay_room: String,
 	client_sock: String,
 ) -> anyhow::Result<()> {
+	let rt = tokio::runtime::Builder::new_multi_thread()
+		.enable_all()
+		.worker_threads(2)
+		.build()?;
+	let res = client_inner(verbosity, relay_url, relay_room, client_sock, &rt);
+	// mainly wait for our websocket connection to close...
+	rt.shutdown_timeout(Duration::from_secs_f64(0.5));
+	res
+}
+
+fn client_inner(
+	verbosity: log::LevelFilter,
+	relay_url: Option<http::Uri>,
+	relay_room: String,
+	client_sock: String,
+	rt: &Runtime,
+) -> anyhow::Result<()> {
 	let verbosity = if true { log::LevelFilter::Debug } else { verbosity };
 	flexi_logger::Logger::with(
 		flexi_logger::LogSpecification::builder()
 			.default(verbosity)
-			.module("mpvipc", log::LevelFilter::Error)
 			.module("rustls", log::LevelFilter::Warn)
 			.module("tokio_tungstenite", log::LevelFilter::Warn)
 			.module("tungstenite", log::LevelFilter::Warn)
@@ -224,11 +238,6 @@ pub fn client(
 
 	// TODO: include git revision...?
 	info!("simulcast-mpv version {}!", env!("CARGO_PKG_VERSION"));
-
-	let rt = tokio::runtime::Builder::new_multi_thread()
-		.enable_all()
-		.worker_threads(2)
-		.build()?;
 
 	let relay_url = if let Some(relay_url) = relay_url {
 		relay_url
@@ -271,13 +280,13 @@ pub fn client(
 
 	info!("relay_url = '{relay_url}'");
 
-	// I was originally testing with hardcoded socket names but had a typo that put me back an hour...
-	// Commands, get/set_property will eat events in the queue so let's separate the sockets...
+	// The previously-used mpvipc crate would potentially eat events, which isn't optimal.
+	// It's still easier to separate sockets for events & querying to help minimize
+	// the chance of bugs until I finish more TODOs in mpvipc.rs
 	let mut mpv_events =
 		Mpv::connect(&client_sock).context(format!("failed to connect to mpv socket '{}'", client_sock))?;
 	let mut mpv_query = Mpv::connect(&client_sock)?;
 	mpv_query.events(false);
-	//
 	let mut mpv_ws = Mpv::connect(&client_sock)?;
 	mpv_ws.events(false);
 
@@ -287,11 +296,13 @@ pub fn client(
 	let _ = std::thread::spawn(move || {
 		let mut mpv_heartbeat = Mpv::connect(&heartbeat_sock).unwrap();
 		mpv_heartbeat.events(false);
+		// with a 32-bit build: it'd take 13.6y to finish this loop 😇
 		for i in 1..usize::MAX {
 			std::thread::sleep(Duration::from_secs_f64(0.1));
-			mpv_heartbeat
-				.set_property("user-data/simulcast/heartbeat", &json!(i))
-				.unwrap();
+			if let Err(_) = mpv_heartbeat.set_property("user-data/simulcast/heartbeat", &json!(i)) {
+				// mpv most likely exited (or if the property setting is failing: everything is already fucked!)
+				return;
+			}
 		}
 	});
 

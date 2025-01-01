@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright 2023-2024 rtldg <rtldg@protonmail.com>
+// Copyright 2023-2025 rtldg <rtldg@protonmail.com>
 
 use crate::message::WsMessage;
 use chrono::prelude::*;
@@ -58,7 +58,7 @@ async fn handle_websocket(
 		let mut rooms = rooms.lock().unwrap();
 		let _ = remove_from_room(id, &current_room, rooms.deref_mut());
 	}
-	println!("finished with client {id} {addr} ({ret:?})");
+	println!("finished with client {id} {addr} {ret:?}");
 	ret
 }
 

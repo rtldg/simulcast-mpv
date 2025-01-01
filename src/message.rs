@@ -29,6 +29,7 @@ pub enum WsMessage {
 
 impl WsMessage {
 	/// The `Message::Text` type stores a `Bytes` internally which clones cheaply so let's just prepare that early so we don't have to allocate as much 😇
+	/// The `bool` in the returned tuple is whether logs should ignore the message. (Which they should for Ping/Pong)
 	pub fn to_websocket_msg(&self) -> (tokio_tungstenite::tungstenite::protocol::Message, bool) {
 		(
 			tokio_tungstenite::tungstenite::protocol::Message::Text(serde_json::to_string(self).unwrap().into()),
