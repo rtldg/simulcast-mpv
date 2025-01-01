@@ -51,6 +51,7 @@ async fn handle_websocket(
 	id: u64,
 	addr: std::net::SocketAddr,
 	rooms: Rooms,
+	connected_counter: Arc<()>,
 ) -> anyhow::Result<()> {
 	let mut current_room = String::new();
 	let ret = handle_websocket_inner(stream, id, &mut current_room, rooms.clone()).await;
@@ -58,7 +59,8 @@ async fn handle_websocket(
 		let mut rooms = rooms.lock().unwrap();
 		let _ = remove_from_room(id, &current_room, rooms.deref_mut());
 	}
-	println!("finished with client {id} {addr} {ret:?}");
+	let num_connected = Arc::strong_count(&connected_counter) - 2; // -1 for ourself & -1 for the original
+	println!("finished with client {id} {addr} ({num_connected} clients connected) {ret:?}");
 	ret
 }
 
@@ -248,13 +250,21 @@ async fn async_server(addr: std::net::SocketAddr) -> anyhow::Result<()> {
 
 	let rooms: Rooms = Default::default();
 	let mut latest_id = 0;
+	let connected_counter = Arc::new(());
 
 	loop {
 		if let Ok((stream, addr)) = listener.accept().await {
 			latest_id += 1;
 			let rooms = rooms.clone();
-			println!("accepted client {latest_id} {addr}");
-			tokio::spawn(handle_websocket(stream, latest_id, addr, rooms));
+			let num_connected = Arc::strong_count(&connected_counter);
+			println!("accepted client {latest_id} {addr} ({num_connected} clients connected)");
+			tokio::spawn(handle_websocket(
+				stream,
+				latest_id,
+				addr,
+				rooms,
+				connected_counter.clone(),
+			));
 		}
 	}
 }
