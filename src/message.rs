@@ -29,14 +29,21 @@ pub enum WsMessage {
 
 impl WsMessage {
 	/// The `Message::Text` type stores a `Bytes` internally which clones cheaply so let's just prepare that early so we don't have to allocate as much 😇
-	/// The `bool` in the returned tuple is whether logs should ignore the message. (Which they should for Ping/Pong)
-	pub fn to_websocket_msg(&self) -> (tokio_tungstenite::tungstenite::protocol::Message, bool) {
-		(
-			tokio_tungstenite::tungstenite::protocol::Message::Text(serde_json::to_string(self).unwrap().into()),
-			match self {
-				WsMessage::Ping(_) | WsMessage::Pong(_) => true,
-				_ => false,
-			},
-		)
+	pub fn to_websocket_msg(&self) -> tokio_tungstenite::tungstenite::protocol::Message {
+		tokio_tungstenite::tungstenite::protocol::Message::Text(serde_json::to_string(self).unwrap().into())
+	}
+
+	pub fn send_helper(&self, stdout: bool) -> tokio_tungstenite::tungstenite::protocol::Message {
+		match self {
+			WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+			_ => {
+				if stdout {
+					println!("send msg = {self:?}");
+				} else {
+					log::debug!("send msg = {self:?}")
+				}
+			}
+		}
+		self.to_websocket_msg()
 	}
 }

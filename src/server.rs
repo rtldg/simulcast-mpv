@@ -17,7 +17,7 @@ use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message};
 struct Member {
 	id: u64,
 	ping: f64,
-	sender: tokio::sync::mpsc::UnboundedSender<(Message, bool)>,
+	sender: tokio::sync::mpsc::UnboundedSender<Message>,
 }
 
 #[derive(Default)]
@@ -38,7 +38,7 @@ fn remove_from_room(id: u64, current_room: &String, rooms: &mut HashMap<String, 
 		rooms.remove(current_room);
 	} else {
 		let len = members.len();
-		let msg = WsMessage::Party(len as u32).to_websocket_msg();
+		let msg = WsMessage::Party(len as u32).send_helper(true);
 		for member in members {
 			let _ = member.sender.send(msg.clone());
 		}
@@ -85,14 +85,10 @@ async fn handle_websocket_inner(
 	let mut ping = 0.0;
 
 	let (mut ws_s, mut ws_r) = ws.split();
-	let (ch_s, mut ch_r) = tokio::sync::mpsc::unbounded_channel::<(Message, bool)>();
+	let (ch_s, mut ch_r) = tokio::sync::mpsc::unbounded_channel();
 
 	tokio::spawn(async move {
-		while let Some((msg, ignore_this_message)) = ch_r.recv().await {
-			// println!("send msg = {msg:?}");
-			if !ignore_this_message {
-				println!("send msg = {msg:?}");
-			}
+		while let Some(msg) = ch_r.recv().await {
 			let _ = ws_s.send(msg).await;
 		}
 	});
@@ -105,7 +101,7 @@ async fn handle_websocket_inner(
 		tokio::select! {
 			_ = interval.tick() => {
 				let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-				ch_s.send(WsMessage::Ping(now).to_websocket_msg())?;
+				ch_s.send(WsMessage::Ping(now).send_helper(true))?;
 
 				if last_pong_time.elapsed() > Duration::from_secs(10) {
 					anyhow::bail!("client {id} hasn't pong'd for 10s and probably lost connection."); // anyhow::bail!() will return btw...
@@ -127,7 +123,7 @@ async fn handle_websocket_inner(
 					WsMessage::Info(_) => {
 						// Could be a more strongly-typed info message via json+serde but it doesn't really matter.
 						let s = format!("version {} repo {}", env!("CARGO_PKG_VERSION"), REPO_URL.get().unwrap());
-						let _ = ch_s.send(WsMessage::Info(s).to_websocket_msg());
+						let _ = ch_s.send(WsMessage::Info(s).send_helper(true));
 					}
 					WsMessage::Join(ref new_room) => {
 						if new_room.as_str() == current_room {
@@ -150,7 +146,7 @@ async fn handle_websocket_inner(
 							let room = rooms.entry(new_room.clone()).or_default();
 							room.members.push(me);
 							let len = room.members.len();
-							let msg = WsMessage::Party(len as u32).to_websocket_msg();
+							let msg = WsMessage::Party(len as u32).send_helper(true);
 							for member in &room.members {
 								let _ = member.sender.send(msg.clone());
 							}
@@ -197,7 +193,7 @@ async fn handle_websocket_inner(
 									tokio::time::sleep(delay).await;
 								}
 								// println!("sent resume to {}", id);
-								let _ = sender.send(WsMessage::Resume.to_websocket_msg());
+								let _ = sender.send(WsMessage::Resume.send_helper(true));
 							});
 						}
 						room.queued_resumes = Some(set);
@@ -207,7 +203,7 @@ async fn handle_websocket_inner(
 							continue;
 						}
 
-						let msg = WsMessage::AbsoluteSeek(t).to_websocket_msg();
+						let msg = WsMessage::AbsoluteSeek(t).send_helper(true);
 						let mut rooms = rooms.lock().unwrap();
 						let room = rooms.get_mut(current_room).unwrap();
 						drop(room.queued_resumes.take()); // abort queued resumes...

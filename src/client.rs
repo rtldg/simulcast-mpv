@@ -12,13 +12,13 @@ use log::debug;
 use log::error;
 use log::info;
 use serde_json::json;
-use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use tokio::runtime::Runtime;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 
 use futures::SinkExt;
 use futures::StreamExt;
@@ -72,16 +72,14 @@ async fn ws_thread(
 
 	info!("connected to websocket");
 
-	ws.send(WsMessage::Info(String::new()).to_websocket_msg().0).await?;
+	ws.send(WsMessage::Info(String::new()).to_websocket_msg()).await?;
 
 	{
 		let room_hash = {
 			let state = state.lock().unwrap();
 			state.room_hash.clone()
 		};
-		let joinmsg = WsMessage::Join(room_hash);
-		debug!("send msg = {joinmsg:?}");
-		ws.send(joinmsg.to_websocket_msg().0).await?;
+		ws.send(WsMessage::Join(room_hash).send_helper(false)).await?;
 	}
 
 	// Using an `Instant` instead of `intervals_since_last_ping` because it's less prone to breaking in case the interval duration is ever changed for some reason.
@@ -106,11 +104,7 @@ async fn ws_thread(
 					).await; // could be canceled if the Runtime is dropped fast
 					return Ok(());
 				};
-				match msg {
-					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
-					_ => debug!("send msg = {msg:?}")
-				}
-				ws.send(msg.to_websocket_msg().0).await?;
+				ws.send(msg.send_helper(false)).await?;
 			}
 			msg = ws.next() => {
 				let msg = msg.unwrap()?.into_text()?;
@@ -166,7 +160,7 @@ async fn ws_thread(
 					},
 					WsMessage::Ping(s) => {
 						last_ping_time = std::time::Instant::now();
-						ws.send(WsMessage::Pong(s).to_websocket_msg().0).await?;
+						ws.send(WsMessage::Pong(s).to_websocket_msg()).await?;
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
 				}
