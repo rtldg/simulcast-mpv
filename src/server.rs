@@ -4,6 +4,7 @@
 use crate::message::WsMessage;
 use chrono::prelude::*;
 use futures::{SinkExt, StreamExt};
+use log::{debug, info};
 use std::{
 	borrow::BorrowMut,
 	collections::HashMap,
@@ -38,7 +39,7 @@ fn remove_from_room(id: u64, current_room: &String, rooms: &mut HashMap<String, 
 		rooms.remove(current_room);
 	} else {
 		let len = members.len();
-		let msg = WsMessage::Party(len as u32).send_helper(true);
+		let msg = WsMessage::Party(len as u32).send_helper();
 		for member in members {
 			let _ = member.sender.send(msg.clone());
 		}
@@ -60,7 +61,7 @@ async fn handle_websocket(
 		let _ = remove_from_room(id, &current_room, rooms.deref_mut());
 	}
 	let num_connected = Arc::strong_count(&connected_counter) - 2; // -1 for ourself & -1 for the original
-	println!("finished with client {id} {addr} ({num_connected} clients connected) {ret:?}");
+	info!("finished with client {id} {addr} ({num_connected} clients connected) {ret:?}");
 	ret
 }
 
@@ -101,7 +102,7 @@ async fn handle_websocket_inner(
 		tokio::select! {
 			_ = interval.tick() => {
 				let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-				ch_s.send(WsMessage::Ping(now).send_helper(true))?;
+				ch_s.send(WsMessage::Ping(now).send_helper())?;
 
 				if last_pong_time.elapsed() > Duration::from_secs(10) {
 					anyhow::bail!("client {id} hasn't pong'd for 10s and probably lost connection."); // anyhow::bail!() will return btw...
@@ -111,19 +112,18 @@ async fn handle_websocket_inner(
 				let Some(msg) = msg else { return Ok(()); };
 				let msg = msg?.into_text()?;
 				let Ok(msg) = serde_json::from_str(&msg) else {
-					// println!("unknown message from client {id} msg = {msg}");
+					//debug!("unknown message from client {id} msg = {msg}");
 					continue;
 				};
-				// println!("recv msg = {msg:?}");
 				match msg {
 					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
-					_ => println!("recv msg = {msg:?}")
+					_ => debug!("recv msg = {msg:?}")
 				}
 				match msg {
 					WsMessage::Info(_) => {
 						// Could be a more strongly-typed info message via json+serde but it doesn't really matter.
 						let s = format!("version {} repo {}", env!("CARGO_PKG_VERSION"), REPO_URL.get().unwrap());
-						let _ = ch_s.send(WsMessage::Info(s).send_helper(true));
+						let _ = ch_s.send(WsMessage::Info(s).send_helper());
 					}
 					WsMessage::Join(ref new_room) => {
 						if new_room.as_str() == current_room {
@@ -146,7 +146,7 @@ async fn handle_websocket_inner(
 							let room = rooms.entry(new_room.clone()).or_default();
 							room.members.push(me);
 							let len = room.members.len();
-							let msg = WsMessage::Party(len as u32).send_helper(true);
+							let msg = WsMessage::Party(len as u32).send_helper();
 							for member in &room.members {
 								let _ = member.sender.send(msg.clone());
 							}
@@ -160,7 +160,7 @@ async fn handle_websocket_inner(
 							continue;
 						}
 
-						let msg = WsMessage::Resume.send_helper(true);
+						let msg = WsMessage::Resume.send_helper();
 
 						let mut rooms = rooms.lock().unwrap();
 						let room = rooms.get_mut(current_room).unwrap();
@@ -205,7 +205,7 @@ async fn handle_websocket_inner(
 							continue;
 						}
 
-						let msg = WsMessage::AbsoluteSeek(t).send_helper(true);
+						let msg = WsMessage::AbsoluteSeek(t).send_helper();
 
 						let mut rooms = rooms.lock().unwrap();
 						let room = rooms.get_mut(current_room).unwrap();
@@ -227,7 +227,7 @@ async fn handle_websocket_inner(
 							.to_std()?
 							.as_secs_f64();
 						ping = elapsed / 2.0;
-						// println!("  ping = {ping}s");
+						//debug!("  ping = {ping}s");
 
 						last_pong_time = std::time::Instant::now();
 
@@ -245,7 +245,7 @@ async fn handle_websocket_inner(
 
 async fn async_server(addr: std::net::SocketAddr) -> anyhow::Result<()> {
 	let listener = tokio::net::TcpListener::bind(addr).await?;
-	println!("listening on {addr}");
+	info!("listening on {addr}");
 
 	let rooms: Rooms = Default::default();
 	let mut latest_id = 0;
@@ -256,7 +256,7 @@ async fn async_server(addr: std::net::SocketAddr) -> anyhow::Result<()> {
 			latest_id += 1;
 			let rooms = rooms.clone();
 			let num_connected = Arc::strong_count(&connected_counter);
-			println!("accepted client {latest_id} {addr} ({num_connected} clients connected)");
+			info!("accepted client {latest_id} {addr} ({num_connected} clients connected)");
 			tokio::spawn(handle_websocket(
 				stream,
 				latest_id,
@@ -274,6 +274,18 @@ pub fn server(
 	bind_port: u16,
 	repo_url: &http::Uri,
 ) -> anyhow::Result<()> {
+	let verbosity = if true { log::LevelFilter::Debug } else { verbosity };
+	flexi_logger::Logger::with(
+		flexi_logger::LogSpecification::builder()
+			.default(verbosity)
+			.module("rustls", log::LevelFilter::Warn)
+			.module("tokio_tungstenite", log::LevelFilter::Warn)
+			.module("tungstenite", log::LevelFilter::Warn)
+			.build(),
+	)
+	.format(flexi_logger::colored_default_format)
+	.start()?;
+
 	let _ = REPO_URL.get_or_init(|| repo_url.clone());
 	let addr = std::net::SocketAddr::new(bind_address, bind_port);
 	let rt = tokio::runtime::Runtime::new()?;

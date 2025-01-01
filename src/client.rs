@@ -79,7 +79,7 @@ async fn ws_thread(
 			let state = state.lock().unwrap();
 			state.room_hash.clone()
 		};
-		ws.send(WsMessage::Join(room_hash).send_helper(false)).await?;
+		ws.send(WsMessage::Join(room_hash).send_helper()).await?;
 	}
 
 	// Using an `Instant` instead of `intervals_since_last_ping` because it's less prone to breaking in case the interval duration is ever changed for some reason.
@@ -104,7 +104,7 @@ async fn ws_thread(
 					).await; // could be canceled if the Runtime is dropped fast
 					return Ok(());
 				};
-				ws.send(msg.send_helper(false)).await?;
+				ws.send(msg.send_helper()).await?;
 			}
 			msg = ws.next() => {
 				let msg = msg.unwrap()?.into_text()?;

@@ -33,16 +33,10 @@ impl WsMessage {
 		tokio_tungstenite::tungstenite::protocol::Message::Text(serde_json::to_string(self).unwrap().into())
 	}
 
-	pub fn send_helper(&self, stdout: bool) -> tokio_tungstenite::tungstenite::protocol::Message {
+	pub fn send_helper(&self) -> tokio_tungstenite::tungstenite::protocol::Message {
 		match self {
 			WsMessage::Ping(_) | WsMessage::Pong(_) => (),
-			_ => {
-				if stdout {
-					println!("send msg = {self:?}");
-				} else {
-					log::debug!("send msg = {self:?}")
-				}
-			}
+			_ => log::debug!("send msg = {self:?}"),
 		}
 		self.to_websocket_msg()
 	}
