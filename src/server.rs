@@ -160,6 +160,8 @@ async fn handle_websocket_inner(
 							continue;
 						}
 
+						let msg = WsMessage::Resume.send_helper(true);
+
 						let mut rooms = rooms.lock().unwrap();
 						let room = rooms.get_mut(current_room).unwrap();
 
@@ -188,12 +190,12 @@ async fn handle_websocket_inner(
 							// let id = member.id;
 							let sender = member.sender.clone();
 							let delay = Duration::from_secs_f64(highest_ping - member.ping);
+							let msg = msg.clone();
 							set.spawn(async move {
 								if !delay.is_zero() {
 									tokio::time::sleep(delay).await;
 								}
-								// println!("sent resume to {}", id);
-								let _ = sender.send(WsMessage::Resume.send_helper(true));
+								let _ = sender.send(msg);
 							});
 						}
 						room.queued_resumes = Some(set);
@@ -204,6 +206,7 @@ async fn handle_websocket_inner(
 						}
 
 						let msg = WsMessage::AbsoluteSeek(t).send_helper(true);
+
 						let mut rooms = rooms.lock().unwrap();
 						let room = rooms.get_mut(current_room).unwrap();
 						drop(room.queued_resumes.take()); // abort queued resumes...
