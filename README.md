@@ -32,7 +32,6 @@ The `simulcast-mpv` executable has 4 "modes":
     - `cargo +1.75 build --release` (1.75 for Windows 7 support)
     - `cargo zigbuild --release --target x86_64-unknown-linux-musl`
     - [cargo-dist](https://github.com/axodotdev/cargo-dist)? I don't particularly want to package .msi installers though...
-- better logic to sync the position when someone joins a party (other than having an existing user just seek backwards from their position by 5s (which will sync the new user)...)
 - Fix some logic bug that gets you trapped in a pause/unpause loop.
 
 

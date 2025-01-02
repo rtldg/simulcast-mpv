@@ -122,15 +122,21 @@ async fn ws_thread(
 					},
 					WsMessage::Join(_) => { /* we shouldn't be receiving this */ },
 					WsMessage::Party(count) => {
-						let should_pause = {
+						let (should_pause, should_seek) = {
 							let mut state = state.lock().unwrap();
+
+							// a new user has joined the party
+							let should_seek = state.party_count > 0 && count > state.party_count;
+
 							if state.party_count < 2 && count == 1 {
 								// user is solo-watching and probably just opened mpv...
 							} else {
+								// party count has changed (or we just got a random Party msg?) so pause that bih
 								state.paused = true;
 							}
+
 							state.party_count = count;
-							state.paused
+							(state.paused, should_seek)
 						};
 
 						if should_pause {
@@ -139,6 +145,20 @@ async fn ws_thread(
 							let _ = mpv.set_property("speed", &json!(1.0)); // useful for me (since I have my default mpv speed at 1.5x)
 
 							let _ = mpv.show_text(&format!("party count: {count}"), Some(2000), None);
+						}
+
+						// TODO:
+						// This isn't optimal because if every member sends a Seek (which they do)
+						// then we could be jumping around. I don't feel like adding some
+						// server-side hax to ignore all but the first seek. At least right now...
+						// But that's probably the way to go.
+						if should_seek {
+							let Ok(time) = mpv.get_property("playback-time/full") else {
+								continue;
+							};
+							let time = time.as_f64().unwrap();
+							debug!("party_count increased so sending Seek");
+							ws.send(WsMessage::AbsoluteSeek(time).to_websocket_msg()).await?;
 						}
 					},
 					WsMessage::Resume => {
