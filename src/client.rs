@@ -400,7 +400,11 @@ fn client_inner(
 						}
 					}
 					"filename" => {
-						let filename = value["data"].as_str().unwrap();
+						let Some(filename) = value.get("data") else {
+							continue;
+						};
+						let filename = filename.as_str().unwrap();
+
 						let room_hash = {
 							let mut state = state.lock().unwrap();
 							if !state.room_code.is_empty() {
