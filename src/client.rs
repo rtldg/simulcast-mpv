@@ -346,6 +346,8 @@ fn client_inner(
 	let (mut A_spam_last, mut A_spam_count, mut A_spam_cooldown) =
 		(std::time::SystemTime::now(), 0, std::time::SystemTime::UNIX_EPOCH);
 
+	let mut need_to_skip_first_unpause = true;
+
 	while let Ok(value) = mpv_events.listen_for_event() {
 		//debug!("{}", value);
 		match value["event"].as_str().unwrap() {
@@ -354,6 +356,7 @@ fn client_inner(
 				match value["name"].as_str().unwrap() {
 					"pause" => {
 						let paused = value["data"].as_bool().unwrap();
+
 						let Ok(time) = mpv_query.get_property("playback-time/full") else {
 							debug!("pause called. paused={paused}, no time though");
 							continue;
@@ -365,6 +368,15 @@ fn client_inner(
 
 						if paused == state.paused {
 							continue;
+						}
+
+						if !paused && need_to_skip_first_unpause {
+							need_to_skip_first_unpause = false;
+							if state.party_count > 1 {
+								drop(state);
+								mpv_query.set_property("pause", &json!(true))?;
+								continue;
+							}
 						}
 
 						state.time = time;
