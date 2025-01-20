@@ -14,7 +14,7 @@ mp.utils = require("mp.utils")
 SIMULCAST_ENABLED = true
 SIMULCAST_CONNECTED = nil
 
-local platform = mp.get_property("platform")
+local PLATFORM = mp.get_property("platform")
 
 mp.set_property("user-data/simulcast/fuckmpv", ".")
 
@@ -66,7 +66,6 @@ local function setup_keybinds()
 	end)
 end
 
---[[
 local function get_env_map()
 	local envrion = mp.utils.get_env_list()
 	local ret = {}
@@ -78,8 +77,17 @@ local function get_env_map()
 	end
 	return ret
 end
-]]
 
+local function get_linux_socket_directory()
+	local environ = get_env_map()
+	local dir = environ["XDG_RUNTIME_DIR"]
+	--mp.command_native({"expand-path", "~~cache/"}) -- meh
+	if dir == nil then dir = "/tmp/" end
+	return dir
+end
+
+-- Linux sockets are created with 600 perms.
+--   https://github.com/mpv-player/mpv/blob/c438732b239bf4e7f3d574f8fcc141f92366018a/input/ipc-unix.c#L315
 local function setup_ipc_socket(dev)
 	local client_sock = mp.get_property("input-ipc-server")
 	if client_sock and client_sock:len() > 0 then
@@ -92,11 +100,11 @@ local function setup_ipc_socket(dev)
 		client_sock = "mpvsock" .. mp.get_property("pid", "0")
 	end
 
-	if platform == "windows" then
+	if PLATFORM == "windows" then
 		client_sock = "\\\\.\\pipe\\" .. client_sock
 		mp.set_property("input-ipc-server", client_sock)
 	else
-		client_sock = mp.utils.join_path(mp.command_native({"expand-path", "~~cache/"}), client_sock)
+		client_sock = mp.utils.join_path(get_linux_socket_directory(), client_sock)
 		mp.set_property("input-ipc-server", client_sock)
 	end
 
@@ -105,7 +113,7 @@ end
 
 local function start_executable(client_sock)
 	local executable = mp.utils.join_path(mp.command_native({"expand-path", "~~home/"}), "scripts/simulcast-mpv")
-	if platform == "windows" then
+	if PLATFORM == "windows" then
 		executable = executable .. ".exe"
 	end
 

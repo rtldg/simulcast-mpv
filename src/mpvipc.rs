@@ -20,7 +20,12 @@ impl Mpv {
 	/// On Windows: `pipe` should be a string similar to r"\\.\pipe\mysocketnamehere"
 	/// On Linux: `pipe` should be a local file path for a unix-socket such as "/tmp/mpv.sock"
 	pub fn connect(pipe: &str) -> anyhow::Result<Mpv> {
-		let name = pipe.to_fs_name::<GenericFilePath>()?;
+		let name = if cfg!(windows) && !pipe.starts_with(r"\\.\pipe\") {
+			format!(r"\\.pipe\{pipe}").to_fs_name::<GenericFilePath>()?
+		} else {
+			pipe.to_fs_name::<GenericFilePath>()?
+		};
+
 		let stream = Stream::connect(name)?;
 		let (r, s) = stream.split();
 
