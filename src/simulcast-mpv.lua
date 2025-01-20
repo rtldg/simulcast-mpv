@@ -66,6 +66,20 @@ local function setup_keybinds()
 	end)
 end
 
+--[[
+local function get_env_map()
+	local envrion = mp.utils.get_env_list()
+	local ret = {}
+	for _, envvar in ipairs(environ) do
+		local a,b = string.find(envvar, "=")
+		if a ~= nil and a ~= 1 then
+			ret[envvar:sub(1, a-1)] = envvar:sub(b+1)
+		end
+	end
+	return ret
+end
+]]
+
 local function setup_ipc_socket(dev)
 	local client_sock = mp.get_property("input-ipc-server")
 	if client_sock and client_sock:len() > 0 then
@@ -82,7 +96,7 @@ local function setup_ipc_socket(dev)
 		client_sock = "\\\\.\\pipe\\" .. client_sock
 		mp.set_property("input-ipc-server", client_sock)
 	else
-		client_sock = "/tmp/" .. client_sock
+		client_sock = mp.utils.join_path(mp.command_native({"expand-path", "~~cache/"}), client_sock)
 		mp.set_property("input-ipc-server", client_sock)
 	end
 
@@ -90,7 +104,7 @@ local function setup_ipc_socket(dev)
 end
 
 local function start_executable(client_sock)
-	local executable = mp.command_native({"expand-path", "~~home/"}) .. "/scripts/simulcast-mpv"
+	local executable = mp.utils.join_path(mp.command_native({"expand-path", "~~home/"}), "scripts/simulcast-mpv")
 	if platform == "windows" then
 		executable = executable .. ".exe"
 	end
