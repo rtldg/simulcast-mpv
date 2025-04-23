@@ -101,12 +101,12 @@ async fn handle_websocket_inner(
 	loop {
 		tokio::select! {
 			_ = interval.tick() => {
-				let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-				ch_s.send(WsMessage::Ping(now).send_helper())?;
-
 				if last_pong_time.elapsed() > Duration::from_secs(10) {
 					anyhow::bail!("client {id} hasn't pong'd for 10s and probably lost connection."); // anyhow::bail!() will return btw...
 				}
+
+				let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+				ch_s.send(WsMessage::Ping(now).send_helper())?;
 			}
 			msg = ws_r.next() => {
 				let Some(msg) = msg else { return Ok(()); };
