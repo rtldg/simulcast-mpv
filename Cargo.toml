@@ -19,6 +19,7 @@ default = [
 client = [
 	"dep:blake3",
 	"dep:directories",
+	"dep:idna_adapter",
 	"dep:interprocess",
 	"dep:log-panics",
 	"dep:rand",
@@ -47,6 +48,7 @@ serde_json = "1"
 log-panics = { version = "2", features = ["with-backtrace"], optional = true }
 
 http = "1"
+idna_adapter = { version = "=1.0.0", optional = true } # locked to 1.0.0 to prevent pulling in a ton of unicode bullshit
 reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls"], optional = true }
 
 interprocess = { version = "2", optional = true }
