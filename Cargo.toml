@@ -17,6 +17,7 @@ default = [
 	"server"
 ]
 client = [
+	"dep:backtrace",
 	"dep:blake3",
 	"dep:directories",
 	"dep:idna_adapter",
@@ -45,6 +46,7 @@ dotenvy = { version = "0.15" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+backtrace = { version = "=0.3.74", optional = true } # locked for Rust 1.75 / Windows 7 support
 log-panics = { version = "2", features = ["with-backtrace"], optional = true }
 
 http = "1"
