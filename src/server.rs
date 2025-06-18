@@ -274,7 +274,6 @@ pub fn server(
 	bind_port: u16,
 	repo_url: &http::Uri,
 ) -> anyhow::Result<()> {
-	let verbosity = if true { log::LevelFilter::Debug } else { verbosity };
 	flexi_logger::Logger::with(
 		flexi_logger::LogSpecification::builder()
 			.default(verbosity)
