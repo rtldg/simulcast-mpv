@@ -67,7 +67,7 @@ local function setup_keybinds()
 end
 
 local function get_env_map()
-	local envrion = mp.utils.get_env_list()
+	local environ = mp.utils.get_env_list()
 	local ret = {}
 	for _, envvar in ipairs(environ) do
 		local a,b = string.find(envvar, "=")
