@@ -212,6 +212,12 @@ fn client_inner(
 	client_sock: String,
 	rt: &Runtime,
 ) -> anyhow::Result<()> {
+	let temp_directory = if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
+		std::path::PathBuf::from(dir)
+	} else {
+		std::env::temp_dir()
+	};
+
 	let verbosity = if true { log::LevelFilter::Debug } else { verbosity };
 	flexi_logger::Logger::with(
 		flexi_logger::LogSpecification::builder()
@@ -223,7 +229,7 @@ fn client_inner(
 	)
 	.format(flexi_logger::detailed_format)
 	.log_to_stdout()
-	.log_to_file(flexi_logger::FileSpec::default().directory(std::env::temp_dir()))
+	.log_to_file(flexi_logger::FileSpec::default().directory(temp_directory))
 	// .log_to_file(flexi_logger::FileSpec::try_from("simulcast.log")?)
 	.start()?;
 	// simple_logging::log_to_file("out.log", verbosity)?;
