@@ -39,7 +39,7 @@ impl Mpv {
 
 	pub fn events(&mut self, enabled: bool) {
 		if enabled {
-			let _ = self.event_queue.get_or_insert_with(|| VecDeque::new());
+			let _ = self.event_queue.get_or_insert_with(VecDeque::new);
 		} else {
 			self.event_queue = None;
 		}

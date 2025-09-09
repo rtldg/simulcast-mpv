@@ -293,7 +293,7 @@ fn client_inner(
 		// with a 32-bit build: it'd take 13.6y to finish this loop 😇
 		for i in 1..usize::MAX {
 			std::thread::sleep(Duration::from_secs_f64(0.1));
-			if let Err(_) = mpv_heartbeat.set_property("user-data/simulcast/heartbeat", &json!(i)) {
+			if mpv_heartbeat.set_property("user-data/simulcast/heartbeat", &json!(i)).is_err() {
 				// mpv most likely exited (or if the property setting is failing: everything is already fucked!)
 				return;
 			}
@@ -335,7 +335,7 @@ fn client_inner(
 				let mut state = state_ws.lock().unwrap();
 				state.party_count = 0;
 			}
-			tokio::time::sleep(Duration::from_secs_f64(3.1415926535897932384626433)).await;
+			tokio::time::sleep(Duration::from_secs_f64(std::f64::consts::PI)).await;
 		}
 	});
 
