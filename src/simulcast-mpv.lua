@@ -8,6 +8,7 @@
 --                                   BE CAREFUL!!                                    --
 ---------------------------------------------------------------------------------------
 
+mp.input = require("mp.input")
 mp.msg = require("mp.msg")
 mp.utils = require("mp.utils")
 
@@ -52,17 +53,35 @@ local function setup_keybinds()
 	mp.add_forced_key_binding("space", pause_toggle)
 	mp.add_forced_key_binding("p", pause_toggle)
 
+	local A_spam_last = mp.get_time()
+	local A_spam_count = 0
+	local A_spam_cooldown = 0
 	mp.add_key_binding("a", "simulcast-info", function()
-		-- TODO: Spam `a` a few times to open a prompt to accept a custom roomid.
-		mp.set_property("user-data/simulcast/fuckmpv", "print_info")
-		--[[
-		SIMULCAST_ENABLED = not SIMULCAST_ENABLED
-		if not SIMULCAST_ENABLED then
-			-- TODO: doesn't do anything yet... lol...
-			mp.set_property("user-data/simulcast/fuckmpv", "disabled")
+		print(mp.get_time())
+		if (mp.get_time() - A_spam_last) > 2.0 then
+			A_spam_count = 0
+			A_spam_cooldown = 0
 		end
-		mp.osd_message("SIMULCAST " .. (SIMULCAST_ENABLED and "ON" or "OFF"), 2.0)
-		]]
+
+		A_spam_count = A_spam_count + 1
+		A_spam_last = mp.get_time()
+
+		if A_spam_count > 3 and (mp.get_time() - A_spam_cooldown) > 2.0 then
+			A_spam_cooldown = mp.get_time()
+			---mp.msg.warn("HERE!")
+			mp.input.get({
+				prompt = "Please input a special room code (or nothing, to reset):",
+				submit = function(room_code)
+					mp.set_property("user-data/simulcast/input_reader", room_code)
+				end,
+			})
+		end
+
+		local party_count = mp.get_property_number("user-data/simulcast/party_count", 0)
+		local room_code = mp.get_property_native("user-data/simulcast/room_code", "")
+		local room_hash = mp.get_property_native("user-data/simulcast/room_hash", "")
+
+		mp.osd_message("SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..room_code.."'\nroom id/hash = "..room_hash, 7.0)
 	end)
 end
 
@@ -136,13 +155,13 @@ end
 
 local DEV = false
 
-local timer = setup_heartbeat()
+local _heartbeat_timer = setup_heartbeat()
 setup_keybinds()
 local mpvsock = setup_ipc_socket(DEV)
 if DEV then
 	mp.osd_message(mpvsock, 5.0)
 else
-	local async_abort_table = start_executable(mpvsock)
+	local _async_abort_table = start_executable(mpvsock)
 end
 
 --[[

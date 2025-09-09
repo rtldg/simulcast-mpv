@@ -64,12 +64,6 @@ enum Commands {
 		#[arg(long, env = "SIMULCAST_REPO_URL")]
 		repo_url: http::Uri,
 	},
-	#[cfg(feature = "client")]
-	InputReader {
-		/// mpv's socket path (input-ipc-server) that we connect to.
-		#[arg(long, env = "SIMULCAST_CLIENT_SOCK")]
-		client_sock: String,
-	},
 }
 
 fn main() -> anyhow::Result<()> {
@@ -97,8 +91,6 @@ fn main() -> anyhow::Result<()> {
 				relay_room,
 				client_sock,
 			} => client::client(args.verbose.log_level_filter(), relay_url, relay_room, client_sock),
-			#[cfg(feature = "client")]
-			Commands::InputReader { client_sock } => input_reader(&client_sock),
 		};
 		info!("res = {res:?}");
 		res
@@ -122,17 +114,6 @@ fn main() -> anyhow::Result<()> {
 			Ok(())
 		}
 	}
-}
-
-#[cfg(feature = "client")]
-fn input_reader(client_sock: &str) -> anyhow::Result<()> {
-	let mut mpv = mpvipc::Mpv::connect(client_sock)?;
-	println!("Please input a special room code (or nothing, to reset) then hit enter:");
-	// std::io::stdout().flush().unwrap();
-	let mut code = String::new();
-	let _ = std::io::stdin().read_line(&mut code).unwrap();
-	let _ = mpv.set_property("user-data/simulcast/input_reader", &serde_json::json!(code.trim()));
-	Ok(())
 }
 
 #[cfg(feature = "client")]

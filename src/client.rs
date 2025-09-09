@@ -12,8 +12,6 @@ use log::debug;
 use log::error;
 use log::info;
 use serde_json::json;
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -139,6 +137,8 @@ async fn ws_thread(
 							(state.paused, should_seek)
 						};
 
+						let _ = mpv.set_property("user-data/simulcast/party_count", &json!(count));
+
 						if should_pause {
 							// these can hit too early and cause `Err(MpvError: property unavailable)`?
 							let _ = mpv.set_property("pause", &json!(true));
@@ -187,26 +187,6 @@ async fn ws_thread(
 			}
 		}
 	}
-}
-
-fn spawn_input_reader(client_sock: String) -> anyhow::Result<()> {
-	let exe = std::env::current_exe()?;
-	#[cfg(windows)]
-	{
-		const CREATE_NEW_CONSOLE: u32 = 0x00000010;
-		let _ = std::process::Command::new(exe)
-			.args(["input-reader", "--client-sock", &client_sock])
-			.creation_flags(CREATE_NEW_CONSOLE)
-			.spawn()?
-			.wait()?;
-	}
-	#[cfg(not(windows))]
-	{
-		// TODO... Spawn xterm maybe...
-		let _ = exe;
-		let _ = client_sock;
-	}
-	Ok(())
 }
 
 pub fn client(
@@ -336,6 +316,10 @@ fn client_inner(
 		room_hash: get_room_hash(&file, &relay_room),
 	}));
 
+	mpv_query.set_property("user-data/simulcast/party_count", &json!(0))?;
+	mpv_query.set_property("user-data/simulcast/room_code", &json!(""))?;
+	mpv_query.set_property("user-data/simulcast/room_hash", &json!(state.lock().unwrap().room_hash))?;
+
 	let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
 	let state_ws = state.clone();
 	rt.spawn(async move {
@@ -362,10 +346,6 @@ fn client_inner(
 	mpv_events.observe_property(5, "user-data/simulcast/input_reader")?;
 
 	// let mut tick = 0;
-	#[allow(non_snake_case)]
-	let (mut A_spam_last, mut A_spam_count, mut A_spam_cooldown) =
-		(std::time::SystemTime::now(), 0, std::time::SystemTime::UNIX_EPOCH);
-
 	let mut need_to_skip_first_unpause = true;
 
 	while let Ok(value) = mpv_events.listen_for_event() {
@@ -430,14 +410,17 @@ fn client_inner(
 							if !state.room_code.is_empty() {
 								// The roomid should:tm: still be valid.
 								continue;
-							} else {
-								state.party_count = 0;
-								if !filename.is_empty() {
-									state.room_hash = get_room_hash(filename, &relay_room);
-								}
+							}
+							state.party_count = 0;
+							if !filename.is_empty() {
+								state.room_hash = get_room_hash(filename, &relay_room);
 							}
 							state.room_hash.clone()
 						};
+
+						mpv_query.set_property("user-data/simulcast/party_count", &json!(0))?;
+						mpv_query.set_property("user-data/simulcast/room_hash", &json!(room_hash))?;
+
 						let _ = sender.send(WsMessage::Join(room_hash));
 					}
 					"user-data/simulcast/fuckmpv" => {
@@ -462,33 +445,6 @@ fn client_inner(
 							// let time: f64 = mpv_query.get_property("playback-time/full")?;
 							// sender.send(WsMessage::AbsoluteSeek(time))?;
 							let _ = sender.send(WsMessage::Resume);
-						} else if data == "print_info" {
-							if A_spam_last.elapsed()? > Duration::from_secs(2) {
-								A_spam_count = 0;
-								A_spam_cooldown = std::time::SystemTime::UNIX_EPOCH;
-							}
-
-							A_spam_count += 1;
-							A_spam_last = std::time::SystemTime::now();
-
-							if A_spam_count > 3 && A_spam_cooldown.elapsed()? > Duration::from_secs(2) {
-								A_spam_cooldown = std::time::SystemTime::now();
-								let input_reader_sock = client_sock.clone();
-								let _ = std::thread::spawn(|| spawn_input_reader(input_reader_sock));
-								// do prompt for custom room code...
-							}
-
-							// holy shit I hate Lua
-							let (party_count, room_code, room_hash) = {
-								let state = state.lock().unwrap();
-								(state.party_count, state.room_code.clone(), state.room_hash.clone())
-							};
-
-							let _ = mpv_query.show_text(
-								&format!("SIMULCAST\nparty count = {party_count}\ncustom room code = '{room_code}'\nroom id/hash = {room_hash}"),
-								Some(7000),
-								None
-							);
 						}
 					}
 					"user-data/simulcast/input_reader" => {
@@ -496,11 +452,11 @@ fn client_inner(
 							// tf?
 							continue;
 						};
-						let data = data.to_string();
+						let room_code = data.to_string();
 
 						let room_hash = {
 							let mut state = state.lock().unwrap();
-							state.room_code = data;
+							state.room_code = room_code;
 							if !state.room_code.is_empty() {
 								state.room_hash = get_room_hash(&state.room_code, &relay_room);
 							} else {
@@ -514,6 +470,10 @@ fn client_inner(
 							}
 							state.room_hash.clone()
 						};
+
+						mpv_query.set_property("user-data/simulcast/room_code", &json!(data))?;
+						mpv_query.set_property("user-data/simulcast/room_hash", &json!(room_hash))?;
+
 						let _ = sender.send(WsMessage::Join(room_hash));
 					}
 					"playback-time" => {
@@ -549,6 +509,8 @@ fn client_inner(
 					}
 
 					drop(state);
+
+					mpv_query.set_property("user-data/simulcast/party_count", &json!(party_count))?;
 
 					if party_count > 1 && !paused {
 						mpv_query.set_property("pause", &json!(true))?;
