@@ -1410,7 +1410,7 @@ dependencies = [
 
 [[package]]
 name = "simulcast-mpv"
-version = "2.1.1"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "backtrace",
