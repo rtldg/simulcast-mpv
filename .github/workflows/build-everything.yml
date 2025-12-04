@@ -14,40 +14,36 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_everything:
-    runs-on: windows-latest
-
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Prepare env
         shell: bash
         run: echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
       - uses: actions/checkout@v4
-      - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@v1.10.12
-      - name: Install the cargo bins we use...
-        shell: pwsh
-        run: |
-          cargo binstall -y cargo-zigbuild
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v1
-        with:
-          version: '0.13.0'
-      - name: Install Rust toolchains
+      - name: Build for Windows
+        if: startsWith(matrix.os, 'windows-')
         run: |
           rustup toolchain add 1.75-x86_64-pc-windows-msvc
-          rustup target add x86_64-unknown-linux-musl
-      - name: Build for Windows 7
-        run: |
           cargo +1.75 build --release
+      - name: Build for Linux
+        if: startsWith(matrix.os, 'ubuntu-')
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --release --target x86_64-unknown-linux-musl
       - name: Upload Windows build
+        if: startsWith(matrix.os, 'windows-')
         uses: actions/upload-artifact@v4
         with:
           name: simulcast-mpv-${{ github.head_ref || github.ref_name }}-${{ env.GITHUB_SHA_SHORT }}-windows
           path: target/release/simulcast-mpv.exe
-      - name: Build for Linux
-        run: |
-          cargo zigbuild --release --target x86_64-unknown-linux-musl
       - name: Upload Linux build
+        if: startsWith(matrix.os, 'ubuntu-')
         uses: actions/upload-artifact@v4
         with:
           name: simulcast-mpv-${{ github.head_ref || github.ref_name }}-${{ env.GITHUB_SHA_SHORT }}-linux
