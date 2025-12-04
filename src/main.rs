@@ -168,8 +168,12 @@ fn install() -> anyhow::Result<()> {
 	});
 	if target_exe != current_exe {
 		println!("- Writing  {}...", target_exe.display());
-		let _ = std::fs::copy(&current_exe, &target_exe)
-			.with_context(|| format!("Failed to write {}", target_exe.display()))?;
+		let mut tmp_exe = target_exe.clone();
+		tmp_exe.add_extension(".tmp");
+		let _ =
+			std::fs::copy(&current_exe, &tmp_exe).with_context(|| format!("Failed to write {}", tmp_exe.display()))?;
+		let _ = std::fs::rename(&tmp_exe, &target_exe)
+			.with_context(|| format!("Failed to rename {} to {}", tmp_exe.display(), target_exe.display()))?;
 	}
 
 	println!("\nDONE!");
