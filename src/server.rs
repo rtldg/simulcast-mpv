@@ -18,6 +18,7 @@ use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message};
 struct Member {
 	id: u64,
 	ping: f64,
+	version: semver::Version,
 	sender: tokio::sync::mpsc::UnboundedSender<Message>,
 }
 
@@ -85,6 +86,8 @@ async fn handle_websocket_inner(
 	// We still want ping calculation even when a user isn't in a room...
 	let mut ping = 0.0;
 
+	let mut version = semver::Version::parse("2.0.0").unwrap();
+
 	let (mut ws_s, mut ws_r) = ws.split();
 	let (ch_s, mut ch_r) = tokio::sync::mpsc::unbounded_channel();
 
@@ -120,7 +123,12 @@ async fn handle_websocket_inner(
 					_ => debug!("recv msg = {msg:?}")
 				}
 				match msg {
-					WsMessage::Info(_) => {
+					WsMessage::Info(s) => {
+						if let Ok(v) = semver::Version::parse(&s) {
+							version = v;
+						} else {
+							version = semver::Version::parse("2.1.0").unwrap();
+						}
 						// Could be a more strongly-typed info message via json+serde but it doesn't really matter.
 						let s = format!("version {} repo {}", env!("CARGO_PKG_VERSION"), REPO_URL.get().unwrap());
 						let _ = ch_s.send(WsMessage::Info(s).send_helper());
@@ -136,6 +144,7 @@ async fn handle_websocket_inner(
 							Member {
 								id,
 								ping,
+								version: version.clone(),
 								sender: ch_s.clone(),
 							}
 						} else {
@@ -235,6 +244,30 @@ async fn handle_websocket_inner(
 							let mut rooms = rooms.lock().unwrap();
 							let room = rooms.get_mut(current_room).unwrap();
 							room.members.iter_mut().find(|m| m.id == id).unwrap().ping = ping;
+						}
+					}
+					WsMessage::Chat { sender, text } => {
+						if current_room == "" {
+							continue;
+						}
+
+						let msg = WsMessage::Chat { sender, text }.send_helper();
+
+						const CHAT_MIN_VERSION: semver::Version = semver::Version {
+							major: 2,
+							minor: 3,
+							patch: 0,
+							pre: semver::Prerelease::EMPTY,
+							build: semver::BuildMetadata::EMPTY,
+						};
+
+						let mut rooms = rooms.lock().unwrap();
+						let room = rooms.get_mut(current_room).unwrap();
+
+						for member in &room.members {
+							if member.version >= CHAT_MIN_VERSION {
+								let _ = member.sender.send(msg.clone());
+							}
 						}
 					}
 				}

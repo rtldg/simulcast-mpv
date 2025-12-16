@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: WTFPL
--- Copyright 2023-2024 rtldg <rtldg@protonmail.com>
+-- Copyright 2023-2025 rtldg <rtldg@protonmail.com>
 
 ---------------------------------------------------------------------------------------
 --                                     WARNING                                       --
@@ -82,6 +82,15 @@ local function setup_keybinds()
 		local room_hash = mp.get_property_native("user-data/simulcast/room_hash", "")
 
 		mp.osd_message("SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..room_code.."'\nroom id/hash = "..room_hash, 7.0)
+	end)
+
+	mp.add_key_binding("enter", "simulcast-chat", function()
+		mp.input.get({
+			prompt = "> ",
+			submit = function(text)
+				mp.set_property("user-data/simulcast/text_chat", text)
+			end,
+		})
 	end)
 end
 

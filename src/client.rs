@@ -70,7 +70,8 @@ async fn ws_thread(
 
 	info!("connected to websocket");
 
-	ws.send(WsMessage::Info(String::new()).to_websocket_msg()).await?;
+	ws.send(WsMessage::Info(String::from(env!("CARGO_PKG_VERSION"))).to_websocket_msg())
+		.await?;
 
 	{
 		let room_hash = {
@@ -183,6 +184,20 @@ async fn ws_thread(
 						ws.send(WsMessage::Pong(s).to_websocket_msg()).await?;
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
+					WsMessage::Chat { sender, text } => {
+						// Append `text` to a table (in Lua) so pressing `a` will show the text history
+						// Log to console.
+
+						// "$>" disables 'Property Expansion' for `show-text`
+
+						let chatmsg = if let Some(sender) = sender {
+							format!("$>\n\n> {}: {}", text.trim(), sender.trim())
+						} else {
+							format!("$>\n\n> {}", text.trim())
+						};
+
+						let _ = mpv.show_text(&chatmsg, Some(5000), None);
+					}
 				}
 			}
 		}
@@ -299,7 +314,10 @@ fn client_inner(
 		// with a 32-bit build: it'd take 13.6y to finish this loop 😇
 		for i in 1..usize::MAX {
 			std::thread::sleep(Duration::from_secs_f64(0.1));
-			if mpv_heartbeat.set_property("user-data/simulcast/heartbeat", &json!(i)).is_err() {
+			if mpv_heartbeat
+				.set_property("user-data/simulcast/heartbeat", &json!(i))
+				.is_err()
+			{
 				// mpv most likely exited (or if the property setting is failing: everything is already fucked!)
 				return;
 			}
@@ -350,6 +368,7 @@ fn client_inner(
 	//mpv_events.observe_property(3, "playback-time")?;
 	mpv_events.observe_property(4, "user-data/simulcast/fuckmpv")?;
 	mpv_events.observe_property(5, "user-data/simulcast/input_reader")?;
+	mpv_events.observe_property(6, "user-data/simulcast/text_chat")?;
 
 	// let mut tick = 0;
 	let mut need_to_skip_first_unpause = true;
@@ -481,6 +500,15 @@ fn client_inner(
 						mpv_query.set_property("user-data/simulcast/room_hash", &json!(room_hash))?;
 
 						let _ = sender.send(WsMessage::Join(room_hash));
+					}
+					"user-data/simulcast/text_chat" => {
+						let Some(data) = value["data"].as_str() else {
+							// tf?
+							continue;
+						};
+						let text = data.to_string();
+
+						let _ = sender.send(WsMessage::Chat { sender: None, text });
 					}
 					"playback-time" => {
 						// tick += 1;

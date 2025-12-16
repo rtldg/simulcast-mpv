@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright 2023-2024 rtldg <rtldg@protonmail.com>
+// Copyright 2023-2025 rtldg <rtldg@protonmail.com>
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum WsMessage {
 	// Used to query the server's version & repository.
+	// v2.1.0+
 	// Client<->Server.
 	Info(String),
 
@@ -25,6 +26,11 @@ pub enum WsMessage {
 	Ping(String),
 	//
 	Pong(String),
+
+	//
+	// v2.3.0+
+	// Client<->server.
+	Chat { sender: Option<String>, text: String },
 }
 
 impl WsMessage {
