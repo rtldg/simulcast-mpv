@@ -202,10 +202,12 @@ async fn ws_thread(
 						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
 
 						let chatmsg = if let Some(sender) = sender {
-							format!("\n\n\n\n\n\n\n> {}: {}", text.trim(), sender.trim())
+							format!("\n \n \n \n \n \n \n \n \n \n \n> {}: {}", text.trim(), sender.trim())
 						} else {
-							format!("\n\n\n\n\n\n\n> {}", text.trim())
+							format!("\n \n \n \n \n \n \n \n \n \n \n> {}", text.trim())
 						};
+
+						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(chatmsg.trim()))?;
 
 						let _ = mpv.show_text(&chatmsg, Some(5000), None);
 					}
