@@ -126,6 +126,9 @@ async fn ws_thread(
 					WsMessage::Info(s) => {
 						info!("server info: {s}");
 					},
+					WsMessage::Info2 { version: _ } => {
+						// nothing yet...
+					}
 					WsMessage::Join(_) => { /* we shouldn't be receiving this */ },
 					WsMessage::Party(count) => {
 						let (should_pause, should_seek) = {
