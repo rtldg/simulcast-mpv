@@ -10,6 +10,12 @@ pub enum WsMessage {
 	// Client<->Server.
 	Info(String),
 
+	// I didn't make Info() too compatible with new changes.
+	// So here's this instead where we just add more fields...
+	// v2.3.0+
+	// Client<->Server.
+	Info2 { version: semver::Version },
+
 	//
 	// Only client->server.
 	Join(String),

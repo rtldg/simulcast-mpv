@@ -72,6 +72,13 @@ async fn ws_thread(
 
 	ws.send(WsMessage::Info(String::from(env!("CARGO_PKG_VERSION"))).to_websocket_msg())
 		.await?;
+	ws.send(
+		WsMessage::Info2 {
+			version: env!("CARGO_PKG_VERSION").parse()?,
+		}
+		.to_websocket_msg(),
+	)
+	.await?;
 
 	{
 		let room_hash = {
@@ -185,15 +192,16 @@ async fn ws_thread(
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
 					WsMessage::Chat { sender, text } => {
+						// TODO:
 						// Append `text` to a table (in Lua) so pressing `a` will show the text history
 						// Log to console.
 
-						// "$>" disables 'Property Expansion' for `show-text`
+						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
 
 						let chatmsg = if let Some(sender) = sender {
-							format!("$>\n\n> {}: {}", text.trim(), sender.trim())
+							format!("\n\n\n\n\n\n\n> {}: {}", text.trim(), sender.trim())
 						} else {
-							format!("$>\n\n> {}", text.trim())
+							format!("\n\n\n\n\n\n\n> {}", text.trim())
 						};
 
 						let _ = mpv.show_text(&chatmsg, Some(5000), None);

@@ -65,7 +65,7 @@ blake3 = { version = "1.8", optional = true }
 log = { version = "0.4", features = ["std"] }
 flexi_logger = { version = "=0.29", features = ["async"] } # locked for Rust 1.75 / Windows 7 support
 
-semver = "1"
+semver = { version = "1", features = ["serde"] }
 
 rand = { version = "0.9", optional = true }
 

@@ -86,7 +86,7 @@ async fn handle_websocket_inner(
 	// We still want ping calculation even when a user isn't in a room...
 	let mut ping = 0.0;
 
-	let mut version = semver::Version::parse("2.0.0").unwrap();
+	let mut client_version = semver::Version::parse("2.0.0").unwrap();
 
 	let (mut ws_s, mut ws_r) = ws.split();
 	let (ch_s, mut ch_r) = tokio::sync::mpsc::unbounded_channel();
@@ -123,15 +123,13 @@ async fn handle_websocket_inner(
 					_ => debug!("recv msg = {msg:?}")
 				}
 				match msg {
-					WsMessage::Info(s) => {
-						if let Ok(v) = semver::Version::parse(&s) {
-							version = v;
-						} else {
-							version = semver::Version::parse("2.1.0").unwrap();
-						}
+					WsMessage::Info(_) => {
 						// Could be a more strongly-typed info message via json+serde but it doesn't really matter.
 						let s = format!("version {} repo {}", env!("CARGO_PKG_VERSION"), REPO_URL.get().unwrap());
 						let _ = ch_s.send(WsMessage::Info(s).send_helper());
+					}
+					WsMessage::Info2 { version } => {
+						client_version = version;
 					}
 					WsMessage::Join(ref new_room) => {
 						if new_room.as_str() == current_room {
@@ -144,7 +142,7 @@ async fn handle_websocket_inner(
 							Member {
 								id,
 								ping,
-								version: version.clone(),
+								version: client_version.clone(),
 								sender: ch_s.clone(),
 							}
 						} else {
