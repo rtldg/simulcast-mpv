@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: WTFPL
--- Copyright 2023-2024 rtldg <rtldg@protonmail.com>
+-- Copyright 2023-2025 rtldg <rtldg@protonmail.com>
 
 ---------------------------------------------------------------------------------------
 --                                     WARNING                                       --
@@ -53,6 +53,15 @@ local function setup_keybinds()
 	mp.add_forced_key_binding("space", pause_toggle)
 	mp.add_forced_key_binding("p", pause_toggle)
 
+	local MAX_CHAT_HISTORY = 8
+	local chat_history = {" ", " ",   " ", " ",   " ", " ",   " ", " "}
+	mp.observe_property("user-data/simulcast/latest-chat-message", "native", function(name, value)
+		if #chat_history >= MAX_CHAT_HISTORY then
+			table.remove(chat_history, 1)
+		end
+		chat_history[#chat_history+1] = value
+	end)
+
 	local A_spam_last = mp.get_time()
 	local A_spam_count = 0
 	local A_spam_cooldown = 0
@@ -60,7 +69,7 @@ local function setup_keybinds()
 		print(mp.get_time())
 		if (mp.get_time() - A_spam_last) > 2.0 then
 			A_spam_count = 0
-			A_spam_cooldown = 0
+			A_spam_coodown = 0
 		end
 
 		A_spam_count = A_spam_count + 1
@@ -81,7 +90,24 @@ local function setup_keybinds()
 		local room_code = mp.get_property_native("user-data/simulcast/room_code", "")
 		local room_hash = mp.get_property_native("user-data/simulcast/room_hash", "")
 
-		mp.osd_message("SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..room_code.."'\nroom id/hash = "..room_hash, 7.0)
+		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..room_code.."'\nroom id/hash = "..room_hash.."\n \n"
+
+		for _, value in ipairs(chat_history) do
+			message = message .. value .. "\n"
+		end
+
+		mp.osd_message(message, 7.0)
+	end)
+
+	mp.add_key_binding("enter", "simulcast-chat", function()
+		mp.input.get({
+			prompt = "chat > ",
+			submit = function(text)
+				if text:len() > 0 then
+					mp.set_property("user-data/simulcast/text_chat", text)
+				end
+			end,
+		})
 	end)
 end
 

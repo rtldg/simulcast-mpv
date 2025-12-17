@@ -70,7 +70,15 @@ async fn ws_thread(
 
 	info!("connected to websocket");
 
-	ws.send(WsMessage::Info(String::new()).to_websocket_msg()).await?;
+	ws.send(WsMessage::Info(String::from(env!("CARGO_PKG_VERSION"))).to_websocket_msg())
+		.await?;
+	ws.send(
+		WsMessage::Info2 {
+			version: env!("CARGO_PKG_VERSION").parse()?,
+		}
+		.to_websocket_msg(),
+	)
+	.await?;
 
 	{
 		let room_hash = {
@@ -118,6 +126,9 @@ async fn ws_thread(
 					WsMessage::Info(s) => {
 						info!("server info: {s}");
 					},
+					WsMessage::Info2 { version: _ } => {
+						// nothing yet...
+					}
 					WsMessage::Join(_) => { /* we shouldn't be receiving this */ },
 					WsMessage::Party(count) => {
 						let (should_pause, should_seek) = {
@@ -183,6 +194,19 @@ async fn ws_thread(
 						ws.send(WsMessage::Pong(s).to_websocket_msg()).await?;
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
+					WsMessage::Chat { sender, text } => {
+						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
+
+						let chatmsg = if let Some(sender) = sender {
+							format!(" \n \n \n \n \n \n \n \n \n \n \n \n{}: {}", text.trim(), sender.trim())
+						} else {
+							format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", text.trim())
+						};
+
+						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(chatmsg.trim()))?;
+
+						let _ = mpv.show_text(&chatmsg, Some(5000), None);
+					}
 				}
 			}
 		}
@@ -299,7 +323,10 @@ fn client_inner(
 		// with a 32-bit build: it'd take 13.6y to finish this loop 😇
 		for i in 1..usize::MAX {
 			std::thread::sleep(Duration::from_secs_f64(0.1));
-			if mpv_heartbeat.set_property("user-data/simulcast/heartbeat", &json!(i)).is_err() {
+			if mpv_heartbeat
+				.set_property("user-data/simulcast/heartbeat", &json!(i))
+				.is_err()
+			{
 				// mpv most likely exited (or if the property setting is failing: everything is already fucked!)
 				return;
 			}
@@ -350,6 +377,7 @@ fn client_inner(
 	//mpv_events.observe_property(3, "playback-time")?;
 	mpv_events.observe_property(4, "user-data/simulcast/fuckmpv")?;
 	mpv_events.observe_property(5, "user-data/simulcast/input_reader")?;
+	mpv_events.observe_property(6, "user-data/simulcast/text_chat")?;
 
 	// let mut tick = 0;
 	let mut need_to_skip_first_unpause = true;
@@ -481,6 +509,15 @@ fn client_inner(
 						mpv_query.set_property("user-data/simulcast/room_hash", &json!(room_hash))?;
 
 						let _ = sender.send(WsMessage::Join(room_hash));
+					}
+					"user-data/simulcast/text_chat" => {
+						let Some(data) = value["data"].as_str() else {
+							// tf?
+							continue;
+						};
+						let text = data.to_string();
+
+						let _ = sender.send(WsMessage::Chat { sender: None, text });
 					}
 					"playback-time" => {
 						// tick += 1;
