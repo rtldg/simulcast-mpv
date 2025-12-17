@@ -54,9 +54,9 @@ local function setup_keybinds()
 	mp.add_forced_key_binding("p", pause_toggle)
 
 	local MAX_CHAT_HISTORY = 8
-	local chat_history = {}
+	local chat_history = {" ", " ",   " ", " ",   " ", " ",   " ", " "}
 	mp.observe_property("user-data/simulcast/latest-chat-message", "native", function(name, value)
-		if #chat_history > MAX_CHAT_HISTORY then
+		if #chat_history >= MAX_CHAT_HISTORY then
 			table.remove(chat_history, 1)
 		end
 		chat_history[#chat_history+1] = value
@@ -90,11 +90,8 @@ local function setup_keybinds()
 		local room_code = mp.get_property_native("user-data/simulcast/room_code", "")
 		local room_hash = mp.get_property_native("user-data/simulcast/room_hash", "")
 
-		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..room_code.."'\nroom id/hash = "..room_hash.."\n\n"
+		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..room_code.."'\nroom id/hash = "..room_hash.."\n \n"
 
-		for i = 0, (MAX_CHAT_HISTORY - #chat_history) do
-			message = message .. "\n"
-		end
 		for _, value in ipairs(chat_history) do
 			message = message .. value .. "\n"
 		end
@@ -104,7 +101,7 @@ local function setup_keybinds()
 
 	mp.add_key_binding("enter", "simulcast-chat", function()
 		mp.input.get({
-			prompt = "> ",
+			prompt = "chat > ",
 			submit = function(text)
 				if text:len() > 0 then
 					mp.set_property("user-data/simulcast/text_chat", text)
