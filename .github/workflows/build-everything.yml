@@ -34,8 +34,7 @@ jobs:
       - name: Build for Linux
         if: startsWith(matrix.os, 'ubuntu-')
         run: |
-          rustup target add x86_64-unknown-linux-musl
-          cargo build --release --target x86_64-unknown-linux-musl
+          docker run --rm -it -v "$(pwd)":/home/rust/src ghcr.io/rust-cross/rust-musl-cross:x86_64-musl cargo build --release
       - name: Upload Windows build
         if: startsWith(matrix.os, 'windows-')
         uses: actions/upload-artifact@v4
