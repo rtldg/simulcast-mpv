@@ -18,6 +18,8 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 
+use base64::prelude::*;
+
 use futures::SinkExt;
 use futures::StreamExt;
 
@@ -54,6 +56,35 @@ fn get_room_chat_key(code: &str, relay_room: &str) -> [u8; 32] {
 
 fn get_room_hash(code: &str, relay_room: &str) -> String {
 	blake3::hash(get_room(code, relay_room).as_bytes()).to_hex().to_string()
+}
+
+fn encrypt_chat(mut message: String, key: &[u8]) -> String {
+	const PAD_TO: usize = 480;
+	const PAD_SIZE: usize = 20;
+	if message.len() < PAD_TO {
+		message.reserve(PAD_TO - message.len());
+	}
+	while message.len() < PAD_TO - PAD_SIZE {
+		message.push_str("                    ");
+	}
+	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, key).unwrap();
+	let mut in_out = message.into_bytes();
+	let nonce = key
+		.seal_in_place_append_tag(aws_lc_rs::aead::Aad::empty(), &mut in_out)
+		.unwrap();
+	in_out.extend_from_slice(nonce.as_ref());
+	BASE64_STANDARD.encode(&in_out)
+}
+
+fn decrypt_chat(b64: &str, key: &[u8]) -> anyhow::Result<String> {
+	let mut in_out = BASE64_STANDARD.decode(b64)?;
+	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, key).unwrap();
+	let nonce_len = aws_lc_rs::aead::NONCE_LEN;
+	anyhow::ensure!(in_out.len() > nonce_len + 2);
+	let nonce = in_out.split_off(in_out.len() - nonce_len);
+	let nonce = aws_lc_rs::aead::Nonce::try_assume_unique_for_key(&nonce).unwrap();
+	let plaintext = key.open_in_place(nonce, aws_lc_rs::aead::Aad::empty(), &mut in_out)?;
+	Ok(str::from_utf8(&plaintext)?.trim().to_owned())
 }
 
 async fn ws_thread(
@@ -208,8 +239,6 @@ async fn ws_thread(
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
 					WsMessage::Chat(encrypted) => {
-						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
-
 						let code = {
 							let state = state.lock().unwrap();
 							if state.custom_room_code.is_empty() {
@@ -221,13 +250,16 @@ async fn ws_thread(
 
 						let key = get_room_chat_key(&code, &relay_room);
 
-						let Ok(message) = WsMessage::decrypt_chat(&encrypted, &key) else {
+						let Ok(message) = decrypt_chat(&encrypted, &key) else {
+							//debug!("");
 							continue;
 						};
+						let message = message.trim();
 
-						let message = format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", message.trim());
+						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
+						let message = format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", message);
 
-						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(message.trim()))?;
+						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(message))?;
 
 						let _ = mpv.show_text(&message, Some(5000), None);
 					}
@@ -558,7 +590,7 @@ fn client_inner(
 
 						let key = get_room_chat_key(&code, &relay_room);
 
-						let encrypted = WsMessage::encrypt_chat(text, &key);
+						let encrypted = encrypt_chat(text, &key);
 
 						let _ = sender.send(WsMessage::Chat(encrypted));
 					}

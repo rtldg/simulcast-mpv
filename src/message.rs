@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2023-2025 rtldg <rtldg@protonmail.com>
 
-#[cfg(feature = "client")]
-use base64::prelude::*;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -58,36 +55,5 @@ impl WsMessage {
 			_ => log::debug!("send msg = {self:?}"),
 		}
 		self.to_websocket_msg()
-	}
-
-	#[cfg(feature = "client")]
-	pub fn encrypt_chat(mut message: String, key: &[u8]) -> String {
-		const PAD_TO: usize = 480;
-		const PAD_SIZE: usize = 20;
-		if message.len() < PAD_TO {
-			message.reserve(PAD_TO - message.len());
-		}
-		while message.len() < PAD_TO - PAD_SIZE {
-			message.push_str("                    ");
-		}
-		let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, key).unwrap();
-		let mut in_out = message.into_bytes();
-		let nonce = key
-			.seal_in_place_append_tag(aws_lc_rs::aead::Aad::empty(), &mut in_out)
-			.unwrap();
-		in_out.extend_from_slice(nonce.as_ref());
-		BASE64_STANDARD.encode(&in_out)
-	}
-
-	#[cfg(feature = "client")]
-	pub fn decrypt_chat(encrypted: &str, key: &[u8]) -> anyhow::Result<String> {
-		let mut in_out = BASE64_STANDARD.decode(encrypted)?;
-		let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, key).unwrap();
-		let nonce_len = aws_lc_rs::aead::NONCE_LEN;
-		anyhow::ensure!(encrypted.len() > nonce_len + 2);
-		let nonce = in_out.split_off(encrypted.len() - nonce_len);
-		let nonce = aws_lc_rs::aead::Nonce::try_assume_unique_for_key(&nonce).unwrap();
-		let plaintext = key.open_in_place(nonce, aws_lc_rs::aead::Aad::empty(), &mut in_out)?;
-		Ok(str::from_utf8(&plaintext)?.trim().to_owned())
 	}
 }
