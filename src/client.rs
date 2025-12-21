@@ -32,19 +32,28 @@ struct SharedState {
 	paused: bool,
 	time: f64,
 	room_code: String,
+	custom_room_code: String,
 	room_hash: String,
 }
 
-fn get_room_hash(code: &str, relay_room: &str) -> String {
-	let code = code
-		.chars()
+fn get_room(code: &str, relay_room: &str) -> String {
+	code.chars()
 		.map(|c| match c {
 			'_' | '-' | '+' | '.' => ' ',
 			_ => c,
 		})
 		.collect::<String>()
-		+ relay_room;
-	blake3::hash(code.as_bytes()).to_hex().to_string()
+		+ relay_room
+}
+
+fn get_room_chat_key(code: &str, relay_room: &str) -> [u8; 32] {
+	let mut blah = get_room(code, relay_room);
+	blah.push_str("chattychat");
+	*blake3::hash(blah.as_bytes()).as_bytes()
+}
+
+fn get_room_hash(code: &str, relay_room: &str) -> String {
+	blake3::hash(get_room(code, relay_room).as_bytes()).to_hex().to_string()
 }
 
 async fn ws_thread(
@@ -52,6 +61,7 @@ async fn ws_thread(
 	mpv: &mut Mpv,
 	receiver: &mut UnboundedReceiver<WsMessage>,
 	state: Arc<Mutex<SharedState>>,
+	relay_room: &str,
 ) -> anyhow::Result<()> {
 	info!("ws_thread!");
 
@@ -120,6 +130,9 @@ async fn ws_thread(
 				};
 				match msg {
 					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+					WsMessage::Chat(_) => {
+						debug!("recv msg = Chat(<omitted>)");
+					}
 					_ => debug!("recv msg = {msg:?}")
 				}
 				match msg {
@@ -194,18 +207,31 @@ async fn ws_thread(
 						ws.send(WsMessage::Pong(s).to_websocket_msg()).await?;
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
-					WsMessage::Chat { sender, text } => {
+					WsMessage::Chat(encrypted) => {
 						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
 
-						let chatmsg = if let Some(sender) = sender {
-							format!(" \n \n \n \n \n \n \n \n \n \n \n \n{}: {}", text.trim(), sender.trim())
-						} else {
-							format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", text.trim())
+						// TODO: decode hex & decrypt with room hash thing...
+
+						let code = {
+							let state = state.lock().unwrap();
+							if state.custom_room_code.is_empty() {
+								state.room_code.clone()
+							} else {
+								state.custom_room_code.clone()
+							}
 						};
 
-						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(chatmsg.trim()))?;
+						let key = get_room_chat_key(&code, &relay_room);
 
-						let _ = mpv.show_text(&chatmsg, Some(5000), None);
+						let Ok(message) = WsMessage::decrypt_chat(&encrypted, &key) else {
+							continue;
+						};
+
+						let message = format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", message.trim());
+
+						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(message.trim()))?;
+
+						let _ = mpv.show_text(&message, Some(5000), None);
 					}
 				}
 			}
@@ -345,19 +371,28 @@ fn client_inner(
 		party_count: 0,
 		paused: false,
 		time: 0.0,
-		room_code: String::new(),
+		room_code: file.clone(),
+		custom_room_code: String::new(),
 		room_hash: get_room_hash(&file, &relay_room),
 	}));
 
 	mpv_query.set_property("user-data/simulcast/party_count", &json!(0))?;
-	mpv_query.set_property("user-data/simulcast/room_code", &json!(""))?;
+	mpv_query.set_property("user-data/simulcast/custom_room_code", &json!(""))?;
 	mpv_query.set_property("user-data/simulcast/room_hash", &json!(state.lock().unwrap().room_hash))?;
 
 	let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
 	let state_ws = state.clone();
+	let ws_relay_room = relay_room.clone();
 	rt.spawn(async move {
 		loop {
-			let err = ws_thread(relay_url.to_string(), &mut mpv_ws, &mut receiver, state_ws.clone()).await;
+			let err = ws_thread(
+				relay_url.to_string(),
+				&mut mpv_ws,
+				&mut receiver,
+				state_ws.clone(),
+				&ws_relay_room,
+			)
+			.await;
 			if let Err(err) = err {
 				error!("{:?}", err);
 			} else {
@@ -441,12 +476,13 @@ fn client_inner(
 
 						let room_hash = {
 							let mut state = state.lock().unwrap();
-							if !state.room_code.is_empty() {
+							if !state.custom_room_code.is_empty() {
 								// The roomid should:tm: still be valid.
 								continue;
 							}
 							state.party_count = 0;
 							if !filename.is_empty() {
+								state.room_code = filename.to_owned();
 								state.room_hash = get_room_hash(filename, &relay_room);
 							}
 							state.room_hash.clone()
@@ -486,26 +522,20 @@ fn client_inner(
 							// tf?
 							continue;
 						};
-						let room_code = data.to_string();
+						let custom_room_code = data.to_string();
 
 						let room_hash = {
 							let mut state = state.lock().unwrap();
-							state.room_code = room_code;
-							if !state.room_code.is_empty() {
-								state.room_hash = get_room_hash(&state.room_code, &relay_room);
+							state.custom_room_code = custom_room_code;
+							if !state.custom_room_code.is_empty() {
+								state.room_hash = get_room_hash(&state.custom_room_code, &relay_room);
 							} else {
-								state.room_hash = get_room_hash(
-									&mpv_query
-										.get_property("filename")
-										.map(|v| v.as_str().unwrap_or_default().to_string())
-										.unwrap_or_else(|_| rand::random::<u64>().to_string()),
-									&relay_room,
-								);
+								state.room_hash = get_room_hash(&state.room_code, &relay_room);
 							}
 							state.room_hash.clone()
 						};
 
-						mpv_query.set_property("user-data/simulcast/room_code", &json!(data))?;
+						mpv_query.set_property("user-data/simulcast/custom_room_code", &json!(data))?;
 						mpv_query.set_property("user-data/simulcast/room_hash", &json!(room_hash))?;
 
 						let _ = sender.send(WsMessage::Join(room_hash));
@@ -517,7 +547,20 @@ fn client_inner(
 						};
 						let text = data.to_string();
 
-						let _ = sender.send(WsMessage::Chat { sender: None, text });
+						let code = {
+							let state = state.lock().unwrap();
+							if state.custom_room_code.is_empty() {
+								state.room_code.clone()
+							} else {
+								state.custom_room_code.clone()
+							}
+						};
+
+						let key = get_room_chat_key(&code, &relay_room);
+
+						let encrypted = WsMessage::encrypt_chat(text, &key);
+
+						let _ = sender.send(WsMessage::Chat(encrypted));
 					}
 					"playback-time" => {
 						// tick += 1;

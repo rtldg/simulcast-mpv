@@ -244,12 +244,12 @@ async fn handle_websocket_inner(
 							room.members.iter_mut().find(|m| m.id == id).unwrap().ping = ping;
 						}
 					}
-					WsMessage::Chat { sender, text } => {
+					WsMessage::Chat(encrypted) => {
 						if current_room == "" {
 							continue;
 						}
 
-						let msg = WsMessage::Chat { sender, text }.send_helper();
+						let msg = WsMessage::Chat(encrypted).send_helper();
 
 						const CHAT_MIN_VERSION: semver::Version = semver::Version {
 							major: 2,
