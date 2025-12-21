@@ -210,8 +210,6 @@ async fn ws_thread(
 					WsMessage::Chat(encrypted) => {
 						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
 
-						// TODO: decode hex & decrypt with room hash thing...
-
 						let code = {
 							let state = state.lock().unwrap();
 							if state.custom_room_code.is_empty() {
@@ -245,6 +243,8 @@ pub fn client(
 	relay_room: String,
 	client_sock: String,
 ) -> anyhow::Result<()> {
+	rustls::crypto::aws_lc_rs::default_provider().install_default().unwrap();
+
 	let rt = tokio::runtime::Builder::new_multi_thread()
 		.enable_all()
 		.worker_threads(2)

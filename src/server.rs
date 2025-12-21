@@ -76,7 +76,7 @@ async fn handle_websocket_inner(
 		stream,
 		Some(
 			WebSocketConfig::default()
-				.max_message_size(Some(512))
+				.max_message_size(Some(1024))
 				.max_frame_size(Some(800))
 				.accept_unmasked_frames(false),
 		),
