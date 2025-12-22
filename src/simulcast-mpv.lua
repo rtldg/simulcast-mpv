@@ -80,17 +80,17 @@ local function setup_keybinds()
 			---mp.msg.warn("HERE!")
 			mp.input.get({
 				prompt = "Please input a special room code (or nothing, to reset):",
-				submit = function(room_code)
-					mp.set_property("user-data/simulcast/input_reader", room_code)
+				submit = function(custom_room_code)
+					mp.set_property("user-data/simulcast/input_reader", custom_room_code)
 				end,
 			})
 		end
 
 		local party_count = mp.get_property_number("user-data/simulcast/party_count", 0)
-		local room_code = mp.get_property_native("user-data/simulcast/room_code", "")
+		local custom_room_code = mp.get_property_native("user-data/simulcast/custom_room_code", "")
 		local room_hash = mp.get_property_native("user-data/simulcast/room_hash", "")
 
-		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..room_code.."'\nroom id/hash = "..room_hash.."\n \n"
+		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..custom_room_code.."'\nroom id/hash = "..room_hash.."\n \n"
 
 		for _, value in ipairs(chat_history) do
 			message = message .. value .. "\n"

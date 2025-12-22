@@ -34,9 +34,14 @@ pub enum WsMessage {
 	Pong(String),
 
 	//
-	// v2.3.0+
+	// This message was done different in v2.3.0.
+	// I edited it in v3.0.0 to be encrypted.
 	// Client<->server.
-	Chat { sender: Option<String>, text: String },
+	Chat(String),
+	//
+	// v3.0.0+.
+	// Server->client.
+	RoomRandomChatSalt(String),
 }
 
 impl WsMessage {
@@ -48,6 +53,9 @@ impl WsMessage {
 	pub fn send_helper(&self) -> tokio_tungstenite::tungstenite::protocol::Message {
 		match self {
 			WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+			WsMessage::Chat(_) => {
+				log::debug!("send msg = Chat(<omitted>)");
+			}
 			_ => log::debug!("send msg = {self:?}"),
 		}
 		self.to_websocket_msg()

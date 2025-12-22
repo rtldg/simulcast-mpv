@@ -18,6 +18,8 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 
+use base64::prelude::*;
+
 use futures::SinkExt;
 use futures::StreamExt;
 
@@ -32,19 +34,61 @@ struct SharedState {
 	paused: bool,
 	time: f64,
 	room_code: String,
+	custom_room_code: String,
 	room_hash: String,
+	room_random_chat_salt: String,
 }
 
-fn get_room_hash(code: &str, relay_room: &str) -> String {
-	let code = code
-		.chars()
+fn normalize_room_code(code: &str, relay_room: &str) -> String {
+	code.chars()
 		.map(|c| match c {
 			'_' | '-' | '+' | '.' => ' ',
 			_ => c,
 		})
 		.collect::<String>()
-		+ relay_room;
-	blake3::hash(code.as_bytes()).to_hex().to_string()
+		+ relay_room
+}
+
+fn get_room_chat_key(code: &str, relay_room: &str, chat_salt: &str) -> [u8; 32] {
+	let mut blah = normalize_room_code(code, relay_room);
+	blah.push_str("chattychat");
+	blah.push_str(chat_salt);
+	*blake3::hash(blah.as_bytes()).as_bytes()
+}
+
+fn get_room_hash(code: &str, relay_room: &str) -> String {
+	blake3::hash(normalize_room_code(code, relay_room).as_bytes())
+		.to_hex()
+		.to_string()
+}
+
+fn encrypt_chat(mut message: String, key: [u8; 32]) -> String {
+	const PAD_TO: usize = 480;
+	const PAD_SIZE: usize = 20;
+	if message.len() < PAD_TO {
+		message.reserve(PAD_TO - message.len());
+	}
+	while message.len() < PAD_TO - PAD_SIZE {
+		message.push_str("                    ");
+	}
+	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, &key).unwrap();
+	let mut in_out = message.into_bytes();
+	let nonce = key
+		.seal_in_place_append_tag(aws_lc_rs::aead::Aad::empty(), &mut in_out)
+		.unwrap();
+	in_out.extend_from_slice(nonce.as_ref());
+	BASE64_STANDARD.encode(&in_out)
+}
+
+fn decrypt_chat(b64: &str, key: [u8; 32]) -> anyhow::Result<String> {
+	let mut in_out = BASE64_STANDARD.decode(b64)?;
+	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, &key).unwrap();
+	let nonce_len = aws_lc_rs::aead::NONCE_LEN;
+	anyhow::ensure!(in_out.len() > nonce_len + 2);
+	let nonce = in_out.split_off(in_out.len() - nonce_len);
+	let nonce = aws_lc_rs::aead::Nonce::try_assume_unique_for_key(&nonce).unwrap();
+	let plaintext = key.open_in_place(nonce, aws_lc_rs::aead::Aad::empty(), &mut in_out)?;
+	Ok(std::str::from_utf8(&plaintext)?.trim().to_owned())
 }
 
 async fn ws_thread(
@@ -52,6 +96,7 @@ async fn ws_thread(
 	mpv: &mut Mpv,
 	receiver: &mut UnboundedReceiver<WsMessage>,
 	state: Arc<Mutex<SharedState>>,
+	relay_room: &str,
 ) -> anyhow::Result<()> {
 	info!("ws_thread!");
 
@@ -120,6 +165,12 @@ async fn ws_thread(
 				};
 				match msg {
 					WsMessage::Ping(_) | WsMessage::Pong(_) => (),
+					WsMessage::Chat(_) => {
+						debug!("recv msg = Chat(<omitted>)");
+					}
+					WsMessage::RoomRandomChatSalt(_) => {
+						debug!("recv msg = RoomRandomChatSalt(<omitted>)");
+					}
 					_ => debug!("recv msg = {msg:?}")
 				}
 				match msg {
@@ -194,18 +245,36 @@ async fn ws_thread(
 						ws.send(WsMessage::Pong(s).to_websocket_msg()).await?;
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
-					WsMessage::Chat { sender, text } => {
-						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
-
-						let chatmsg = if let Some(sender) = sender {
-							format!(" \n \n \n \n \n \n \n \n \n \n \n \n{}: {}", text.trim(), sender.trim())
-						} else {
-							format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", text.trim())
+					WsMessage::Chat(encrypted) => {
+						let (code, chat_salt) = {
+							let state = state.lock().unwrap();
+							let code = if state.custom_room_code.is_empty() {
+								state.room_code.clone()
+							} else {
+								state.custom_room_code.clone()
+							};
+							(code, state.room_random_chat_salt.clone())
 						};
 
-						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(chatmsg.trim()))?;
+						let key = get_room_chat_key(&code, &relay_room, &chat_salt);
 
-						let _ = mpv.show_text(&chatmsg, Some(5000), None);
+						let Ok(base_msg) = decrypt_chat(&encrypted, key) else {
+							//debug!("");
+							continue;
+						};
+						let base_msg = base_msg.trim();
+
+						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(base_msg))?;
+
+						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
+						let formatted_msg = format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", base_msg);
+						let _ = mpv.show_text(&formatted_msg, Some(5000), None);
+					}
+					WsMessage::RoomRandomChatSalt(salt) => {
+						{
+							let mut state = state.lock().unwrap();
+							state.room_random_chat_salt = salt;
+						}
 					}
 				}
 			}
@@ -219,6 +288,8 @@ pub fn client(
 	relay_room: String,
 	client_sock: String,
 ) -> anyhow::Result<()> {
+	rustls::crypto::aws_lc_rs::default_provider().install_default().unwrap();
+
 	let rt = tokio::runtime::Builder::new_multi_thread()
 		.enable_all()
 		.worker_threads(2)
@@ -345,19 +416,29 @@ fn client_inner(
 		party_count: 0,
 		paused: false,
 		time: 0.0,
-		room_code: String::new(),
+		room_code: file.clone(),
+		custom_room_code: String::new(),
 		room_hash: get_room_hash(&file, &relay_room),
+		room_random_chat_salt: String::new(),
 	}));
 
 	mpv_query.set_property("user-data/simulcast/party_count", &json!(0))?;
-	mpv_query.set_property("user-data/simulcast/room_code", &json!(""))?;
+	mpv_query.set_property("user-data/simulcast/custom_room_code", &json!(""))?;
 	mpv_query.set_property("user-data/simulcast/room_hash", &json!(state.lock().unwrap().room_hash))?;
 
 	let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
 	let state_ws = state.clone();
+	let ws_relay_room = relay_room.clone();
 	rt.spawn(async move {
 		loop {
-			let err = ws_thread(relay_url.to_string(), &mut mpv_ws, &mut receiver, state_ws.clone()).await;
+			let err = ws_thread(
+				relay_url.to_string(),
+				&mut mpv_ws,
+				&mut receiver,
+				state_ws.clone(),
+				&ws_relay_room,
+			)
+			.await;
 			if let Err(err) = err {
 				error!("{:?}", err);
 			} else {
@@ -441,12 +522,13 @@ fn client_inner(
 
 						let room_hash = {
 							let mut state = state.lock().unwrap();
-							if !state.room_code.is_empty() {
+							if !state.custom_room_code.is_empty() {
 								// The roomid should:tm: still be valid.
 								continue;
 							}
 							state.party_count = 0;
 							if !filename.is_empty() {
+								state.room_code = filename.to_owned();
 								state.room_hash = get_room_hash(filename, &relay_room);
 							}
 							state.room_hash.clone()
@@ -486,26 +568,20 @@ fn client_inner(
 							// tf?
 							continue;
 						};
-						let room_code = data.to_string();
+						let custom_room_code = data.to_string();
 
 						let room_hash = {
 							let mut state = state.lock().unwrap();
-							state.room_code = room_code;
-							if !state.room_code.is_empty() {
-								state.room_hash = get_room_hash(&state.room_code, &relay_room);
+							state.custom_room_code = custom_room_code;
+							if !state.custom_room_code.is_empty() {
+								state.room_hash = get_room_hash(&state.custom_room_code, &relay_room);
 							} else {
-								state.room_hash = get_room_hash(
-									&mpv_query
-										.get_property("filename")
-										.map(|v| v.as_str().unwrap_or_default().to_string())
-										.unwrap_or_else(|_| rand::random::<u64>().to_string()),
-									&relay_room,
-								);
+								state.room_hash = get_room_hash(&state.room_code, &relay_room);
 							}
 							state.room_hash.clone()
 						};
 
-						mpv_query.set_property("user-data/simulcast/room_code", &json!(data))?;
+						mpv_query.set_property("user-data/simulcast/custom_room_code", &json!(data))?;
 						mpv_query.set_property("user-data/simulcast/room_hash", &json!(room_hash))?;
 
 						let _ = sender.send(WsMessage::Join(room_hash));
@@ -517,7 +593,21 @@ fn client_inner(
 						};
 						let text = data.to_string();
 
-						let _ = sender.send(WsMessage::Chat { sender: None, text });
+						let (code, chat_salt) = {
+							let state = state.lock().unwrap();
+							let code = if state.custom_room_code.is_empty() {
+								state.room_code.clone()
+							} else {
+								state.custom_room_code.clone()
+							};
+							(code, state.room_random_chat_salt.clone())
+						};
+
+						let key = get_room_chat_key(&code, &relay_room, &chat_salt);
+
+						let encrypted = encrypt_chat(text, key);
+
+						let _ = sender.send(WsMessage::Chat(encrypted));
 					}
 					"playback-time" => {
 						// tick += 1;
