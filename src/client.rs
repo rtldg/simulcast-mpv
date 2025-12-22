@@ -168,6 +168,9 @@ async fn ws_thread(
 					WsMessage::Chat(_) => {
 						debug!("recv msg = Chat(<omitted>)");
 					}
+					WsMessage::RoomRandomChatSalt(_) => {
+						debug!("recv msg = RoomRandomChatSalt(<omitted>)");
+					}
 					_ => debug!("recv msg = {msg:?}")
 				}
 				match msg {
@@ -255,18 +258,17 @@ async fn ws_thread(
 
 						let key = get_room_chat_key(&code, &relay_room, &chat_salt);
 
-						let Ok(message) = decrypt_chat(&encrypted, key) else {
+						let Ok(base_msg) = decrypt_chat(&encrypted, key) else {
 							//debug!("");
 							continue;
 						};
-						let message = message.trim();
+						let base_msg = base_msg.trim();
+
+						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(base_msg))?;
 
 						// "$>" disables 'Property Expansion' for `show-text`.  but it doesn't work here?
-						let message = format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", message);
-
-						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(message))?;
-
-						let _ = mpv.show_text(&message, Some(5000), None);
+						let formatted_msg = format!(" \n \n \n \n \n \n \n \n \n \n \n \n> {}", base_msg);
+						let _ = mpv.show_text(&formatted_msg, Some(5000), None);
 					}
 					WsMessage::RoomRandomChatSalt(salt) => {
 						{
