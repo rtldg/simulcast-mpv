@@ -36,9 +36,10 @@ struct SharedState {
 	room_code: String,
 	custom_room_code: String,
 	room_hash: String,
+	room_random_chat_salt: String,
 }
 
-fn get_room(code: &str, relay_room: &str) -> String {
+fn normalize_room_code(code: &str, relay_room: &str) -> String {
 	code.chars()
 		.map(|c| match c {
 			'_' | '-' | '+' | '.' => ' ',
@@ -48,17 +49,20 @@ fn get_room(code: &str, relay_room: &str) -> String {
 		+ relay_room
 }
 
-fn get_room_chat_key(code: &str, relay_room: &str) -> [u8; 32] {
-	let mut blah = get_room(code, relay_room);
+fn get_room_chat_key(code: &str, relay_room: &str, chat_salt: &str) -> [u8; 32] {
+	let mut blah = normalize_room_code(code, relay_room);
 	blah.push_str("chattychat");
+	blah.push_str(chat_salt);
 	*blake3::hash(blah.as_bytes()).as_bytes()
 }
 
 fn get_room_hash(code: &str, relay_room: &str) -> String {
-	blake3::hash(get_room(code, relay_room).as_bytes()).to_hex().to_string()
+	blake3::hash(normalize_room_code(code, relay_room).as_bytes())
+		.to_hex()
+		.to_string()
 }
 
-fn encrypt_chat(mut message: String, key: &[u8]) -> String {
+fn encrypt_chat(mut message: String, key: [u8; 32]) -> String {
 	const PAD_TO: usize = 480;
 	const PAD_SIZE: usize = 20;
 	if message.len() < PAD_TO {
@@ -67,7 +71,7 @@ fn encrypt_chat(mut message: String, key: &[u8]) -> String {
 	while message.len() < PAD_TO - PAD_SIZE {
 		message.push_str("                    ");
 	}
-	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, key).unwrap();
+	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, &key).unwrap();
 	let mut in_out = message.into_bytes();
 	let nonce = key
 		.seal_in_place_append_tag(aws_lc_rs::aead::Aad::empty(), &mut in_out)
@@ -76,9 +80,9 @@ fn encrypt_chat(mut message: String, key: &[u8]) -> String {
 	BASE64_STANDARD.encode(&in_out)
 }
 
-fn decrypt_chat(b64: &str, key: &[u8]) -> anyhow::Result<String> {
+fn decrypt_chat(b64: &str, key: [u8; 32]) -> anyhow::Result<String> {
 	let mut in_out = BASE64_STANDARD.decode(b64)?;
-	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, key).unwrap();
+	let key = aws_lc_rs::aead::RandomizedNonceKey::new(&aws_lc_rs::aead::AES_256_GCM, &key).unwrap();
 	let nonce_len = aws_lc_rs::aead::NONCE_LEN;
 	anyhow::ensure!(in_out.len() > nonce_len + 2);
 	let nonce = in_out.split_off(in_out.len() - nonce_len);
@@ -239,18 +243,19 @@ async fn ws_thread(
 					},
 					WsMessage::Pong(_) => { /* we shouldn't be reciving this */},
 					WsMessage::Chat(encrypted) => {
-						let code = {
+						let (code, chat_salt) = {
 							let state = state.lock().unwrap();
-							if state.custom_room_code.is_empty() {
+							let code = if state.custom_room_code.is_empty() {
 								state.room_code.clone()
 							} else {
 								state.custom_room_code.clone()
-							}
+							};
+							(code, state.room_random_chat_salt.clone())
 						};
 
-						let key = get_room_chat_key(&code, &relay_room);
+						let key = get_room_chat_key(&code, &relay_room, &chat_salt);
 
-						let Ok(message) = decrypt_chat(&encrypted, &key) else {
+						let Ok(message) = decrypt_chat(&encrypted, key) else {
 							//debug!("");
 							continue;
 						};
@@ -262,6 +267,12 @@ async fn ws_thread(
 						mpv.set_property("user-data/simulcast/latest-chat-message", &json!(message))?;
 
 						let _ = mpv.show_text(&message, Some(5000), None);
+					}
+					WsMessage::RoomRandomChatSalt(salt) => {
+						{
+							let mut state = state.lock().unwrap();
+							state.room_random_chat_salt = salt;
+						}
 					}
 				}
 			}
@@ -406,6 +417,7 @@ fn client_inner(
 		room_code: file.clone(),
 		custom_room_code: String::new(),
 		room_hash: get_room_hash(&file, &relay_room),
+		room_random_chat_salt: String::new(),
 	}));
 
 	mpv_query.set_property("user-data/simulcast/party_count", &json!(0))?;
@@ -579,18 +591,19 @@ fn client_inner(
 						};
 						let text = data.to_string();
 
-						let code = {
+						let (code, chat_salt) = {
 							let state = state.lock().unwrap();
-							if state.custom_room_code.is_empty() {
+							let code = if state.custom_room_code.is_empty() {
 								state.room_code.clone()
 							} else {
 								state.custom_room_code.clone()
-							}
+							};
+							(code, state.room_random_chat_salt.clone())
 						};
 
-						let key = get_room_chat_key(&code, &relay_room);
+						let key = get_room_chat_key(&code, &relay_room, &chat_salt);
 
-						let encrypted = encrypt_chat(text, &key);
+						let encrypted = encrypt_chat(text, key);
 
 						let _ = sender.send(WsMessage::Chat(encrypted));
 					}

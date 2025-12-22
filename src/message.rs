@@ -38,6 +38,10 @@ pub enum WsMessage {
 	// I edited it for v3.0.0 to be encrypted.
 	// Client<->server.
 	Chat(String),
+	//
+	// v3.0.0.
+	// Server->client.
+	RoomRandomChatSalt(String),
 }
 
 impl WsMessage {

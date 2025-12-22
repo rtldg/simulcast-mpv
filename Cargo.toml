@@ -26,7 +26,6 @@ client = [
 	"dep:idna_adapter",
 	"dep:interprocess",
 	"dep:log-panics",
-	"dep:rand",
 	"dep:reqwest",
 	"dep:rustls",
 ]
@@ -70,7 +69,7 @@ flexi_logger = { version = "=0.29", features = ["async"] } # locked for Rust 1.7
 
 semver = { version = "1", features = ["serde"] }
 
-rand = { version = "0.9", optional = true }
+rand = "0.9"
 
 aws-lc-rs = { version = "1", optional = true }
 base64 = { version = "0.22", optional = true }

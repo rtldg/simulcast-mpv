@@ -5,6 +5,7 @@ use crate::message::WsMessage;
 use chrono::prelude::*;
 use futures::{SinkExt, StreamExt};
 use log::{debug, info};
+use rand::distr::SampleString;
 use std::{
 	borrow::BorrowMut,
 	collections::HashMap,
@@ -26,6 +27,7 @@ struct Member {
 struct Room {
 	queued_resumes: Option<tokio::task::JoinSet<()>>,
 	members: Vec<Member>,
+	random_chat_salt: String,
 }
 
 type Rooms = Arc<Mutex<HashMap<String, Room>>>;
@@ -152,10 +154,25 @@ async fn handle_websocket_inner(
 						if new_room != "" {
 							let room = rooms.entry(new_room.clone()).or_default();
 							room.members.push(me);
+							if room.random_chat_salt.is_empty() {
+								// newly created room
+								room.random_chat_salt = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 16);
+							}
 							let len = room.members.len();
 							let msg = WsMessage::Party(len as u32).send_helper();
 							for member in &room.members {
 								let _ = member.sender.send(msg.clone());
+							}
+
+							const CHAT_MIN_VERSION: semver::Version = semver::Version {
+								major: 3,
+								minor: 0,
+								patch: 0,
+								pre: semver::Prerelease::EMPTY,
+								build: semver::BuildMetadata::EMPTY,
+							};
+							if client_version >= CHAT_MIN_VERSION {
+								let _ = ch_s.send(WsMessage::RoomRandomChatSalt(room.random_chat_salt.clone()).send_helper());
 							}
 						}
 
@@ -252,8 +269,8 @@ async fn handle_websocket_inner(
 						let msg = WsMessage::Chat(encrypted).send_helper();
 
 						const CHAT_MIN_VERSION: semver::Version = semver::Version {
-							major: 2,
-							minor: 3,
+							major: 3,
+							minor: 0,
 							patch: 0,
 							pre: semver::Prerelease::EMPTY,
 							build: semver::BuildMetadata::EMPTY,
@@ -268,6 +285,7 @@ async fn handle_websocket_inner(
 							}
 						}
 					}
+					WsMessage::RoomRandomChatSalt(_) => { /* we shouldn't be receiving this */ }
 				}
 			}
 		}
