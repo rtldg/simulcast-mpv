@@ -84,7 +84,7 @@ fn decrypt_chat(b64: &str, key: &[u8]) -> anyhow::Result<String> {
 	let nonce = in_out.split_off(in_out.len() - nonce_len);
 	let nonce = aws_lc_rs::aead::Nonce::try_assume_unique_for_key(&nonce).unwrap();
 	let plaintext = key.open_in_place(nonce, aws_lc_rs::aead::Aad::empty(), &mut in_out)?;
-	Ok(str::from_utf8(&plaintext)?.trim().to_owned())
+	Ok(std::str::from_utf8(&plaintext)?.trim().to_owned())
 }
 
 async fn ws_thread(
