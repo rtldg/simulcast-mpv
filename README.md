@@ -14,6 +14,7 @@ That's basically what `simulcast-mpv` is.
 - Run `simulcast-mpv`. It will install itself.
 - Start mpv. It should just work™.
 - (optional) Hit `a` once to show some info. Hit `a` a few times really fast to open up an input window for custom room codes. (Maybe you and your friend are watching the same thing, but your file names are different.)
+- Press `ENTER` to open the text-chat prompt! History is viewable in the `a` menu!
 
 The `simulcast-mpv` executable has 4 "modes":
 - `simulcast-mpv`

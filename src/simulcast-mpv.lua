@@ -93,7 +93,7 @@ local function setup_keybinds()
 		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..custom_room_code.."'\nroom id/hash = "..room_hash.."\n \n"
 
 		for _, value in ipairs(chat_history) do
-			message = message .. value .. "\n"
+			message = message .. (value ~= " " and "> " or "") .. value .. "\n"
 		end
 
 		mp.osd_message(message, 7.0)
