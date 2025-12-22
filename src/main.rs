@@ -167,7 +167,7 @@ fn install() -> anyhow::Result<()> {
 		"simulcast-mpv"
 	});
 	if target_exe != current_exe {
-		println!("- Writing  {}...", target_exe.display());
+		println!("- Writing  {}", target_exe.display());
 		let mut tmp_exe = target_exe.clone();
 		tmp_exe.set_extension(".tmp");
 		let _ =
