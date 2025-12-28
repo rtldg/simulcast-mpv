@@ -37,80 +37,6 @@ local function setup_heartbeat()
 	end)
 end
 
-local function setup_keybinds()
-	local function pause_toggle()
-		if mp.get_property_bool("pause") then
-			if SIMULCAST_ENABLED and SIMULCAST_CONNECTED then
-				mp.set_property("user-data/simulcast/fuckmpv", "queue_resume")
-			else
-				mp.set_property_bool("pause", false)
-			end
-		else
-			mp.set_property_bool("pause", true)
-		end
-	end
-	mp.add_forced_key_binding("MBTN_RIGHT", "simulcast-pause-toggle", pause_toggle)
-	mp.add_forced_key_binding("space", pause_toggle)
-	mp.add_forced_key_binding("p", pause_toggle)
-
-	local MAX_CHAT_HISTORY = 8
-	local chat_history = {" ", " ",   " ", " ",   " ", " ",   " ", " "}
-	mp.observe_property("user-data/simulcast/latest-chat-message", "native", function(name, value)
-		if #chat_history >= MAX_CHAT_HISTORY then
-			table.remove(chat_history, 1)
-		end
-		chat_history[#chat_history+1] = value
-	end)
-
-	local A_spam_last = mp.get_time()
-	local A_spam_count = 0
-	local A_spam_cooldown = 0
-	mp.add_key_binding("a", "simulcast-info", function()
-		print(mp.get_time())
-		if (mp.get_time() - A_spam_last) > 2.0 then
-			A_spam_count = 0
-			A_spam_coodown = 0
-		end
-
-		A_spam_count = A_spam_count + 1
-		A_spam_last = mp.get_time()
-
-		if A_spam_count > 3 and (mp.get_time() - A_spam_cooldown) > 2.0 then
-			A_spam_cooldown = mp.get_time()
-			---mp.msg.warn("HERE!")
-			mp.input.get({
-				prompt = "Please input a special room code (or nothing, to reset):",
-				submit = function(custom_room_code)
-					mp.set_property("user-data/simulcast/input_reader", custom_room_code)
-				end,
-			})
-		end
-
-		local party_count = mp.get_property_number("user-data/simulcast/party_count", 0)
-		local custom_room_code = mp.get_property_native("user-data/simulcast/custom_room_code", "")
-		local room_hash = mp.get_property_native("user-data/simulcast/room_hash", "")
-
-		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..custom_room_code.."'\nroom id/hash = "..room_hash.."\n \n"
-
-		for _, value in ipairs(chat_history) do
-			message = message .. (value ~= " " and "> " or "") .. value .. "\n"
-		end
-
-		mp.osd_message(message, 7.0)
-	end)
-
-	mp.add_key_binding("enter", "simulcast-chat", function()
-		mp.input.get({
-			prompt = "chat > ",
-			submit = function(text)
-				if text:len() > 0 then
-					mp.set_property("user-data/simulcast/text_chat", text)
-				end
-			end,
-		})
-	end)
-end
-
 local function get_env_map()
 	local environ = mp.utils.get_env_list()
 	local ret = {}
@@ -177,17 +103,101 @@ local function start_executable(client_sock)
 	)
 end
 
+local function setup_keybinds(client_sock)
+	local function pause_toggle()
+		if mp.get_property_bool("pause") then
+			if SIMULCAST_ENABLED and SIMULCAST_CONNECTED then
+				mp.set_property("user-data/simulcast/fuckmpv", "queue_resume")
+			else
+				mp.set_property_bool("pause", false)
+			end
+		else
+			mp.set_property_bool("pause", true)
+		end
+	end
+	mp.add_forced_key_binding("MBTN_RIGHT", "simulcast-pause-toggle", pause_toggle)
+	mp.add_forced_key_binding("space", pause_toggle)
+	mp.add_forced_key_binding("p", pause_toggle)
+
+	local MAX_CHAT_HISTORY = 8
+	local chat_history = {" ", " ",   " ", " ",   " ", " ",   " ", " "}
+	mp.observe_property("user-data/simulcast/latest-chat-message", "native", function(name, value)
+		if #chat_history >= MAX_CHAT_HISTORY then
+			table.remove(chat_history, 1)
+		end
+		chat_history[#chat_history+1] = value
+	end)
+
+	local A_spam_last = mp.get_time()
+	local A_spam_count = 0
+	local A_spam_cooldown = 0
+	local has_started_simulcast = false
+
+	mp.add_key_binding("a", "simulcast-info", function()
+		if has_started_simulcast == false then
+			start_executable(client_sock)
+			has_started_simulcast = true
+			mp.osd_message("Simulcast started, press A again to show info!!", 3.0)
+			return
+		end
+
+		print(mp.get_time())
+		if (mp.get_time() - A_spam_last) > 2.0 then
+			A_spam_count = 0
+			A_spam_coodown = 0
+		end
+
+		A_spam_count = A_spam_count + 1
+		A_spam_last = mp.get_time()
+
+		if A_spam_count > 3 and (mp.get_time() - A_spam_cooldown) > 2.0 then
+			A_spam_cooldown = mp.get_time()
+			---mp.msg.warn("HERE!")
+			mp.input.get({
+				prompt = "Please input a special room code (or nothing, to reset):",
+				submit = function(custom_room_code)
+					mp.set_property("user-data/simulcast/input_reader", custom_room_code)
+				end,
+			})
+		end
+
+		local party_count = mp.get_property_number("user-data/simulcast/party_count", 0)
+		local custom_room_code = mp.get_property_native("user-data/simulcast/custom_room_code", "")
+		local room_hash = mp.get_property_native("user-data/simulcast/room_hash", "")
+
+		local message = "SIMULCAST\nparty count = "..tostring(party_count).."\ncustom room code = '"..custom_room_code.."'\nroom id/hash = "..room_hash.."\n \n"
+
+		for _, value in ipairs(chat_history) do
+			message = message .. (value ~= " " and "> " or "") .. value .. "\n"
+		end
+
+		mp.osd_message(message, 7.0)
+	end)
+
+	mp.add_key_binding("enter", "simulcast-chat", function()
+		mp.input.get({
+			prompt = "chat > ",
+			submit = function(text)
+				if text:len() > 0 then
+					mp.set_property("user-data/simulcast/text_chat", text)
+				end
+			end,
+		})
+	end)
+end
+
 ---------------------------------------------------------------------------------------
 
 local DEV = false
 
 local _heartbeat_timer = setup_heartbeat()
-setup_keybinds()
 local mpvsock = setup_ipc_socket(DEV)
+
+setup_keybinds(mpvsock)
 if DEV then
 	mp.osd_message(mpvsock, 5.0)
-else
-	local _async_abort_table = start_executable(mpvsock)
+else -- please add a config to make it autostart!!!
+	-- local _async_abort_table = start_executable(mpvsock)
 end
 
 --[[
