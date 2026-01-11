@@ -101,3 +101,5 @@ Relay server "rooms" are public to anyone who joins using the same "room ID".
 "Room IDs" are calculated client-side as `blake3_hash(filename + relay_room)` where `relay_room` is configurable with `SIMULCAST_RELAY_ROOM`/`--relay-room`.
 
 This means the server cannot know which file you are playing unless the server already knows what the `filename + relay_room` combination is.
+
+Chat is encrypted with "Room ID" & a salt from the server that is random per-room.  If you really care though about secure communications with other parties: don't rely on a random video-syncing program for it...
