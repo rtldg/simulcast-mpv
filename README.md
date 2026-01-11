@@ -64,6 +64,15 @@ Configuration files can be placed at
 - `$PWD/simulcast-mpv.env` (current directory AKA where mpv is started from) (Windows + Unix)
 
 
+### Disabling simulcast-mpv[.exe] until you press A
+- Environment variable `SIMULCAST_AUTOSTART=0`
+  - Have this environment variable inherited by mpv somewhere or with something like `SIMULCAST_AUTOSTART=0 mpv file.mp4`.
+  - NOTE: You cannot set this in the `simulcast-mpv.env` file.
+- mpv property `user-data/simulcast/autostart`
+  - You can set this with `mp.set_property_bool("user-data/simulcast/autostart", false)` in a Lua file that runs before `simulcast-mpv.lua`.
+  - mpv executes scripts based on filename order, so a filename like `simulcast-disable-autostart.lua` with that plopped in will work.
+
+
 ## Running the server (the intended way)
 ```sh
 git clone https://github.com/rtldg/simulcast-mpv.git
