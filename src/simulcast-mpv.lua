@@ -12,9 +12,11 @@ mp.input = require("mp.input")
 mp.msg = require("mp.msg")
 mp.utils = require("mp.utils")
 
-SIMULCAST_ENABLED = true
-SIMULCAST_CONNECTED = nil
+local SIMULCAST_ENABLED = false
+local SIMULCAST_CONNECTED = nil
+local SOCKET = nil
 
+local ENVIRON = {}
 local PLATFORM = mp.get_property("platform")
 
 mp.set_property("user-data/simulcast/fuckmpv", ".")
@@ -35,6 +37,70 @@ local function setup_heartbeat()
 		SIMULCAST_CONNECTED = (latest_beat ~= checked_beat)
 		checked_beat = latest_beat
 	end)
+end
+
+local function get_env_map()
+	local environ = mp.utils.get_env_list()
+	local ret = {}
+	for _, envvar in ipairs(environ) do
+		local a,b = string.find(envvar, "=")
+		if a ~= nil and a ~= 1 then
+			ret[envvar:sub(1, a-1)] = envvar:sub(b+1)
+		end
+	end
+	return ret
+end
+ENVIRON = get_env_map()
+
+local function get_linux_socket_directory()
+	local dir = ENVIRON["XDG_RUNTIME_DIR"]
+	--mp.command_native({"expand-path", "~~cache/"}) -- meh
+	if dir == nil then dir = "/tmp/" end
+	return dir
+end
+
+-- Linux sockets are created with 600 perms.
+--   https://github.com/mpv-player/mpv/blob/c438732b239bf4e7f3d574f8fcc141f92366018a/input/ipc-unix.c#L315
+local function setup_ipc_socket()
+	local client_sock = mp.get_property("input-ipc-server")
+	if client_sock and client_sock:len() > 0 then
+		return client_sock
+	end
+
+	client_sock = "mpvsock" .. mp.get_property("pid", "0")
+
+	if PLATFORM == "windows" then
+		client_sock = "\\\\.\\pipe\\" .. client_sock
+		mp.set_property("input-ipc-server", client_sock)
+	else
+		client_sock = mp.utils.join_path(get_linux_socket_directory(), client_sock)
+		mp.set_property("input-ipc-server", client_sock)
+	end
+
+	return client_sock
+end
+
+local function start_executable(client_sock)
+	SIMULCAST_ENABLED = true
+
+	local executable = mp.utils.join_path(mp.command_native({"expand-path", "~~home/"}), "scripts/simulcast-mpv")
+	if PLATFORM == "windows" then
+		executable = executable .. ".exe"
+	end
+
+	return mp.command_native_async(
+		{"run", executable, "client", "--client-sock", client_sock},
+		function(success, result, error)
+			if success then
+				local msg = "simulcast success ("..executable..") | socket = "..client_sock
+				mp.msg.info(msg)
+			else
+				local msg = "simulcast failed ("..executable..") | result = "..tostring(result).." | error = "..tostring(error)
+				mp.osd_message(msg, 20)
+				mp.msg.error(msg)
+			end
+		end
+	)
 end
 
 local function setup_keybinds()
@@ -66,6 +132,12 @@ local function setup_keybinds()
 	local A_spam_count = 0
 	local A_spam_cooldown = 0
 	mp.add_key_binding("a", "simulcast-info", function()
+		if not SIMULCAST_ENABLED then
+			start_executable(SOCKET)
+			mp.osd_message("Simulcast started, press A again to show info!!", 3.0)
+			return
+		end
+
 		print(mp.get_time())
 		if (mp.get_time() - A_spam_last) > 2.0 then
 			A_spam_count = 0
@@ -111,83 +183,15 @@ local function setup_keybinds()
 	end)
 end
 
-local function get_env_map()
-	local environ = mp.utils.get_env_list()
-	local ret = {}
-	for _, envvar in ipairs(environ) do
-		local a,b = string.find(envvar, "=")
-		if a ~= nil and a ~= 1 then
-			ret[envvar:sub(1, a-1)] = envvar:sub(b+1)
-		end
-	end
-	return ret
-end
-
-local function get_linux_socket_directory()
-	local environ = get_env_map()
-	local dir = environ["XDG_RUNTIME_DIR"]
-	--mp.command_native({"expand-path", "~~cache/"}) -- meh
-	if dir == nil then dir = "/tmp/" end
-	return dir
-end
-
--- Linux sockets are created with 600 perms.
---   https://github.com/mpv-player/mpv/blob/c438732b239bf4e7f3d574f8fcc141f92366018a/input/ipc-unix.c#L315
-local function setup_ipc_socket(dev)
-	local client_sock = mp.get_property("input-ipc-server")
-	if client_sock and client_sock:len() > 0 then
-		return client_sock
-	end
-
-	if dev then
-		client_sock = "mpvsock42"
-	else
-		client_sock = "mpvsock" .. mp.get_property("pid", "0")
-	end
-
-	if PLATFORM == "windows" then
-		client_sock = "\\\\.\\pipe\\" .. client_sock
-		mp.set_property("input-ipc-server", client_sock)
-	else
-		client_sock = mp.utils.join_path(get_linux_socket_directory(), client_sock)
-		mp.set_property("input-ipc-server", client_sock)
-	end
-
-	return client_sock
-end
-
-local function start_executable(client_sock)
-	local executable = mp.utils.join_path(mp.command_native({"expand-path", "~~home/"}), "scripts/simulcast-mpv")
-	if PLATFORM == "windows" then
-		executable = executable .. ".exe"
-	end
-
-	return mp.command_native_async(
-		{"run", executable, "client", "--client-sock", client_sock},
-		function(success, result, error)
-			if success then
-				local msg = "simulcast success ("..executable..") | socket = "..client_sock
-				mp.msg.info(msg)
-			else
-				local msg = "simulcast failed ("..executable..") | result = "..tostring(result).." | error = "..tostring(error)
-				mp.osd_message(msg, 20)
-				mp.msg.error(msg)
-			end
-		end
-	)
-end
-
 ---------------------------------------------------------------------------------------
 
-local DEV = false
 
 local _heartbeat_timer = setup_heartbeat()
 setup_keybinds()
-local mpvsock = setup_ipc_socket(DEV)
-if DEV then
-	mp.osd_message(mpvsock, 5.0)
-else
-	local _async_abort_table = start_executable(mpvsock)
+
+SOCKET = setup_ipc_socket()
+if mp.get_property_bool("user-data/simulcast/autostart", true) and ENVIRON["SIMULCAST_AUTOSTART"] ~= "0" then
+	local _async_abort_table = start_executable(SOCKET)
 end
 
 --[[
