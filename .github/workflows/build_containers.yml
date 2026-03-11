@@ -7,7 +7,8 @@ on:
   push:
     branches:
       - master
-  workflow_dispatch:
+  #push:
+   # paths: ["**.rs", "**.lock", "**.toml", "**.yml"]
 
 jobs:
   build-server:
