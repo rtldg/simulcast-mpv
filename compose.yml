@@ -1,7 +1,8 @@
 services:
   simulcast-mpv-relay:
     #user: 1000:1000
-    build: .
+    #build: .
+    image: ghcr.io/rtldg/simulcast-mpv:main
     restart: unless-stopped
     stop_grace_period: 2s
     environment:
