@@ -91,6 +91,40 @@ fn decrypt_chat(b64: &str, key: [u8; 32]) -> anyhow::Result<String> {
 	Ok(std::str::from_utf8(&plaintext)?.trim().to_owned())
 }
 
+/// returns `true` if should seek
+fn party_count_changed(count: u32, mpv: &mut Mpv, state: &Arc<Mutex<SharedState>>) -> bool {
+	let (should_pause, should_seek) = {
+		let mut state = state.lock().unwrap();
+
+		// a new user has joined the party
+		let should_seek = state.party_count > 0 && count > state.party_count;
+
+		if state.party_count < 2 && count == 1 {
+			// user is solo-watching and probably just opened mpv...
+		} else {
+			// party count has changed (or we just got a random Party msg?) so pause that bih
+			state.paused = true;
+		}
+
+		let should_pause = (state.party_count > 0 || count > 1) && state.paused;
+
+		state.party_count = count;
+		(should_pause, should_seek)
+	};
+
+	let _ = mpv.set_property("user-data/simulcast/party_count", &json!(count));
+
+	if should_pause {
+		// these can hit too early and cause `Err(MpvError: property unavailable)`?
+		let _ = mpv.set_property("pause", &json!(true));
+		let _ = mpv.set_property("speed", &json!(1.0)); // useful for me (since I have my default mpv speed at 1.5x)
+
+		let _ = mpv.show_text(&format!("party count: {count}"), Some(2000), None);
+	}
+
+	should_seek
+}
+
 async fn ws_thread(
 	relay_url: String,
 	mpv: &mut Mpv,
@@ -141,7 +175,7 @@ async fn ws_thread(
 		tokio::select! {
 			_ = interval.tick() => {
 				if last_ping_time.elapsed() > Duration::from_secs(10) {
-					anyhow::bail!("server hasn't pinged for 10s and we probably lost connection."); // anyhow::bail!() will return btw...
+					anyhow::bail!("server hasn't pinged for 10s and we probably lost connection.");
 				}
 			}
 			msg = receiver.recv() => {
@@ -182,32 +216,7 @@ async fn ws_thread(
 					}
 					WsMessage::Join(_) => { /* we shouldn't be receiving this */ },
 					WsMessage::Party(count) => {
-						let (should_pause, should_seek) = {
-							let mut state = state.lock().unwrap();
-
-							// a new user has joined the party
-							let should_seek = state.party_count > 0 && count > state.party_count;
-
-							if state.party_count < 2 && count == 1 {
-								// user is solo-watching and probably just opened mpv...
-							} else {
-								// party count has changed (or we just got a random Party msg?) so pause that bih
-								state.paused = true;
-							}
-
-							state.party_count = count;
-							(state.paused, should_seek)
-						};
-
-						let _ = mpv.set_property("user-data/simulcast/party_count", &json!(count));
-
-						if should_pause {
-							// these can hit too early and cause `Err(MpvError: property unavailable)`?
-							let _ = mpv.set_property("pause", &json!(true));
-							let _ = mpv.set_property("speed", &json!(1.0)); // useful for me (since I have my default mpv speed at 1.5x)
-
-							let _ = mpv.show_text(&format!("party count: {count}"), Some(2000), None);
-						}
+						let should_seek = party_count_changed(count, mpv, &state);
 
 						// TODO:
 						// This isn't optimal because if every member sends a Seek (which they do)
@@ -445,10 +454,7 @@ fn client_inner(
 				// Sender/receiver closed and ws_thread returned because the program is about to exit.
 				return;
 			}
-			{
-				let mut state = state_ws.lock().unwrap();
-				state.party_count = 0;
-			}
+			let _ = party_count_changed(0, &mut mpv_ws, &state_ws);
 			tokio::time::sleep(Duration::from_secs_f64(std::f64::consts::PI)).await;
 		}
 	});
