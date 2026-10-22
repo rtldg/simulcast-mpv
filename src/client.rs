@@ -297,8 +297,6 @@ pub fn client(
 	relay_room: String,
 	client_sock: String,
 ) -> anyhow::Result<()> {
-	rustls::crypto::aws_lc_rs::default_provider().install_default().unwrap();
-
 	let rt = tokio::runtime::Builder::new_multi_thread()
 		.enable_all()
 		.worker_threads(2)
