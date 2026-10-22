@@ -29,8 +29,7 @@ jobs:
       - name: Build for Windows
         if: startsWith(matrix.os, 'windows-')
         run: |
-          rustup toolchain add 1.75-x86_64-pc-windows-msvc
-          cargo +1.75 build --release
+          cargo build --release
       - name: Build for Linux
         if: startsWith(matrix.os, 'ubuntu-')
         run: |
